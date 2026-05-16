@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Code, Pencil, Settings as SettingsIcon } from "lucide-react";
 import { createStore, parseMarkdown, serializeDoc } from "mdedit/core";
 import { Editor } from "mdedit/react";
 import { SettingsPopover, type Settings, defaultSettings, loadSettings, saveSettings } from "./Settings";
@@ -84,6 +85,7 @@ export function App() {
 
     const [settings, setSettings] = useState<Settings>(loadSettings);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [view, setView] = useState<"edit" | "source">("edit");
     const settingsButtonRef = useRef<HTMLButtonElement>(null);
 
     // Apply settings to the document root so the body bg, font, and editor
@@ -99,12 +101,13 @@ export function App() {
     return (
         <div className="flex h-full flex-col bg-[var(--caret-bg)] text-[var(--caret-text)]">
             <header
-                className="flex items-baseline gap-3 border-b border-[var(--caret-border)] bg-[var(--caret-surface)] px-6 py-3 pl-[84px]"
+                className="flex items-center gap-3 border-b border-[var(--caret-border)] bg-[var(--caret-surface)] py-[7px] pl-[92px] pr-3"
                 style={dragStyle}
             >
-                <h1 className="m-0 text-sm font-semibold">Caret</h1>
-                <span className="text-xs text-[var(--caret-text-muted)]">untitled.md</span>
-                <div className="ml-auto flex items-center" style={noDragStyle}>
+                <h1 className="m-0 text-sm font-semibold leading-none">Caret</h1>
+                <span className="text-xs leading-none text-[var(--caret-text-muted)]">untitled.md</span>
+                <div className="ml-auto flex items-center gap-1.5" style={noDragStyle}>
+                    <ViewToggle value={view} onChange={setView} />
                     <button
                         ref={settingsButtonRef}
                         type="button"
@@ -112,24 +115,20 @@ export function App() {
                         aria-haspopup="dialog"
                         aria-expanded={settingsOpen}
                         onClick={() => setSettingsOpen((v) => !v)}
-                        className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--caret-text-faint)] transition-colors hover:bg-[var(--caret-border)] hover:text-[var(--caret-text)] focus:outline-none focus:ring-1 focus:ring-[var(--caret-link)]"
+                        className="flex h-6 w-6 items-center justify-center rounded-md text-[var(--caret-text-faint)] transition-colors hover:bg-[var(--caret-border)] hover:text-[var(--caret-text)] focus:outline-none focus:ring-1 focus:ring-[var(--caret-link)]"
                     >
-                        <GearIcon />
+                        <SettingsIcon size={14} strokeWidth={1.75} aria-hidden="true" />
                     </button>
                 </div>
             </header>
-            <main className="grid min-h-0 flex-1 grid-cols-1 gap-px bg-[var(--caret-border)] md:grid-cols-2">
-                <section className="overflow-auto bg-[var(--caret-surface)] px-8 py-6">
+            <main className="min-h-0 flex-1 overflow-auto bg-[var(--caret-surface)] px-8 py-6">
+                {view === "edit" ? (
                     <Editor store={store} className="mx-auto max-w-[720px]" />
-                </section>
-                <section className="overflow-auto bg-[var(--caret-surface-soft)] px-8 py-6">
-                    <header className="mb-3 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--caret-text-muted)]">
-                        Markdown
-                    </header>
-                    <pre className="m-0 whitespace-pre-wrap break-words font-mono text-[13px] leading-[1.55] text-[var(--caret-text-faint)]">
+                ) : (
+                    <pre className="mx-auto m-0 max-w-[720px] whitespace-pre-wrap break-words font-mono text-[13px] leading-[1.55] text-[var(--caret-text-faint)]">
                         {markdown}
                     </pre>
-                </section>
+                )}
             </main>
             {settingsOpen && (
                 <SettingsPopover
@@ -143,21 +142,38 @@ export function App() {
     );
 }
 
-function GearIcon() {
+function ViewToggle({ value, onChange }: { value: "edit" | "source"; onChange: (v: "edit" | "source") => void }) {
+    const baseClass =
+        "flex h-6 items-center gap-1.5 px-2 text-[11px] font-medium leading-none transition-colors focus:outline-none focus:ring-1 focus:ring-[var(--caret-link)]";
+    const activeClass = "bg-[var(--caret-border)] text-[var(--caret-text)]";
+    const inactiveClass = "text-[var(--caret-text-faint)] hover:text-[var(--caret-text)]";
     return (
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <path
-                d="M8 5.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z"
-                stroke="currentColor"
-                strokeWidth="1.25"
-            />
-            <path
-                d="M13.4 9.2l1.1.6-1 1.7-1.2-.4a4.6 4.6 0 01-1.4.8L10.6 13H8.4l-.3-1.1a4.6 4.6 0 01-1.4-.8l-1.2.4-1-1.7 1.1-.6a4.7 4.7 0 010-1.6l-1.1-.6 1-1.7 1.2.4a4.6 4.6 0 011.4-.8L7.4 3h2.2l.3 1.1c.5.2 1 .5 1.4.8l1.2-.4 1 1.7-1.1.6a4.7 4.7 0 010 1.6z"
-                stroke="currentColor"
-                strokeWidth="1.25"
-                strokeLinejoin="round"
-            />
-        </svg>
+        <div
+            className="flex overflow-hidden rounded-md border border-[var(--caret-border)]"
+            role="tablist"
+            aria-label="View mode"
+        >
+            <button
+                type="button"
+                role="tab"
+                aria-selected={value === "edit"}
+                onClick={() => onChange("edit")}
+                className={`${baseClass} ${value === "edit" ? activeClass : inactiveClass}`}
+            >
+                <Pencil size={12} strokeWidth={1.75} aria-hidden="true" />
+                Edit
+            </button>
+            <button
+                type="button"
+                role="tab"
+                aria-selected={value === "source"}
+                onClick={() => onChange("source")}
+                className={`${baseClass} border-l border-[var(--caret-border)] ${value === "source" ? activeClass : inactiveClass}`}
+            >
+                <Code size={12} strokeWidth={1.75} aria-hidden="true" />
+                Source
+            </button>
+        </div>
     );
 }
 
