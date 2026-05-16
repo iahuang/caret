@@ -1,0 +1,521 @@
+/*
+ * mdedit default styles.
+ *
+ * Theming surface: every color, font, and a few key sizes resolve through
+ * CSS custom properties declared on `.mdedit-editor`. Consumers (caret,
+ * other apps) override these vars at any ancestor — typically on
+ * `[data-theme="dark"]` for dark mode, on `[data-font="serif"]` for the
+ * serif variant, etc. Defaults match the original look so the editor still
+ * works without any theming set.
+ *
+ * Variables (all optional; each has a sensible default below):
+ *   --mdedit-font-family       editor body font
+ *   --mdedit-font-mono         inline/block code font
+ *   --mdedit-font-size         editor base font size
+ *   --mdedit-line-height       editor line-height
+ *   --mdedit-text              body text color
+ *   --mdedit-text-muted        list markers, captions
+ *   --mdedit-link              link color
+ *   --mdedit-link-underline    link underline color
+ *   --mdedit-code-bg           inline code background
+ *   --mdedit-hr                horizontal rule color
+ *   --mdedit-quote-bar         blockquote bar color
+ *   --mdedit-quote-text        blockquote text color
+ *   --mdedit-selection         selection rect color
+ *   --mdedit-atom-hover        inline-atom hover bg
+ *   --mdedit-popover-bg
+ *   --mdedit-popover-border
+ *   --mdedit-popover-shadow
+ *   --mdedit-popover-focus
+ *   --mdedit-code-block-bg
+ *   --mdedit-code-block-border
+ *   --mdedit-code-block-toolbar-bg
+ *   --mdedit-code-block-text
+ *   --mdedit-table-border
+ *   --mdedit-table-cell-border
+ *   --mdedit-table-header-bg
+ */
+
+.mdedit-editor {
+    --mdedit-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --mdedit-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --mdedit-font-size: 16px;
+    --mdedit-line-height: 1.6;
+    --mdedit-text: #1a1a1a;
+    --mdedit-text-muted: #888;
+    --mdedit-link: #2563eb;
+    --mdedit-link-underline: rgba(37, 99, 235, 0.4);
+    --mdedit-code-bg: rgba(135, 131, 120, 0.15);
+    --mdedit-hr: #d0d0c8;
+    --mdedit-quote-bar: #d0d0c8;
+    --mdedit-quote-text: #555;
+    --mdedit-selection: rgba(0, 122, 255, 0.25);
+    --mdedit-atom-hover: rgba(0, 122, 255, 0.08);
+    --mdedit-popover-bg: #fff;
+    --mdedit-popover-border: #d0d0c8;
+    --mdedit-popover-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    --mdedit-popover-focus: #4a8cff;
+    --mdedit-code-block-bg: #f6f7f9;
+    --mdedit-code-block-border: #e3e5ea;
+    --mdedit-code-block-toolbar-bg: #eef0f4;
+    --mdedit-code-block-text: #2c3036;
+    --mdedit-table-border: #d8d8d2;
+    --mdedit-table-cell-border: #e3e3dd;
+    --mdedit-table-header-bg: #f7f7f2;
+
+    position: relative;
+    cursor: text;
+    outline: none;
+    color: var(--mdedit-text);
+    font-family: var(--mdedit-font-family);
+    font-size: var(--mdedit-font-size);
+    line-height: var(--mdedit-line-height);
+}
+
+.mdedit-content {
+    position: relative;
+}
+
+/* Preserve trailing/multiple spaces in editable content so what the user
+   typed is what they see (and what gets serialized). break-word keeps long
+   tokens from blowing past the editor width. */
+.mdedit-editor [data-block-content] {
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+.mdedit-block {
+    margin: 0.5em 0;
+}
+
+.mdedit-paragraph {
+    min-height: 1.6em;
+}
+
+.mdedit-heading-1 {
+    font-size: 2em;
+    font-weight: 700;
+    line-height: 1.25;
+    margin: 0.8em 0 0.4em;
+}
+.mdedit-heading-2 {
+    font-size: 1.5em;
+    font-weight: 700;
+    line-height: 1.3;
+    margin: 0.8em 0 0.3em;
+}
+.mdedit-heading-3 {
+    font-size: 1.25em;
+    font-weight: 700;
+    line-height: 1.35;
+    margin: 0.7em 0 0.25em;
+}
+.mdedit-heading-4,
+.mdedit-heading-5,
+.mdedit-heading-6 {
+    font-weight: 700;
+    margin: 0.5em 0 0.2em;
+}
+.mdedit-heading-4 { font-size: 1.1em; }
+.mdedit-heading-5 { font-size: 1em; }
+.mdedit-heading-6 { font-size: 0.9em; }
+
+.mdedit-list-item {
+    display: flex;
+    gap: 8px;
+    margin: 0.15em 0;
+}
+
+.mdedit-list-marker {
+    flex: none;
+    min-width: 1.5em;
+    user-select: none;
+    color: var(--mdedit-text-muted);
+    padding-top: 0.05em;
+}
+
+.mdedit-list-content {
+    flex: 1;
+    min-height: 1.6em;
+}
+
+/* Task items: bullet variant with a checkbox marker. The marker wrapper is
+   data-no-content so the DOM walker skips it. */
+.mdedit-task-marker {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-top: 0.25em;
+}
+.mdedit-task-marker input[type="checkbox"] {
+    cursor: pointer;
+    margin: 0;
+}
+.mdedit-task-checked .mdedit-list-content {
+    color: var(--mdedit-text-muted);
+    text-decoration: line-through;
+}
+
+/* Horizontal rule: visible <hr> plus a thin caret anchor below. The anchor is
+   data-block-content so the bridge can drop the caret there for navigation,
+   even though typing into the block is a no-op. */
+.mdedit-hr-block {
+    margin: 0.8em 0;
+    user-select: none;
+}
+.mdedit-hr {
+    border: none;
+    border-top: 1px solid var(--mdedit-hr);
+    margin: 0;
+    height: 0;
+}
+.mdedit-hr-anchor {
+    height: 0;
+    line-height: 0;
+    font-size: 0;
+    padding: 0;
+    margin: 0;
+}
+
+.mdedit-code {
+    background: var(--mdedit-code-bg);
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+    font-family: var(--mdedit-font-mono);
+    font-size: 0.92em;
+}
+
+.mdedit-link {
+    color: var(--mdedit-link);
+    text-decoration: underline;
+    text-decoration-color: var(--mdedit-link-underline);
+    text-underline-offset: 2px;
+    cursor: text;
+}
+.mdedit-link:hover {
+    text-decoration-color: var(--mdedit-link);
+}
+
+.mdedit-inline-image {
+    max-width: 100%;
+    max-height: 20em;
+    vertical-align: middle;
+    border-radius: 3px;
+    user-select: none;
+}
+
+.mdedit-caret {
+    background: currentColor;
+    pointer-events: none;
+    animation: mdedit-caret-blink 1.06s step-end infinite;
+}
+
+/* While the caret is actively moving (click, arrow keys, typing) we
+   suspend the blink so users can clearly see where it landed. */
+.mdedit-caret-static {
+    animation: none;
+    opacity: 1;
+}
+
+/* Italic-active caret slants like `/`. transform-origin at bottom-left keeps
+   the caret's foot anchored at the logical cursor position. */
+.mdedit-caret-italic {
+    transform: skewX(-12deg);
+    transform-origin: bottom left;
+}
+
+/* Code-active caret gets horizontal serifs at the top and bottom so it reads
+   as an I-beam, matching the monospace-y feel of inline code. */
+.mdedit-caret-code::before,
+.mdedit-caret-code::after {
+    content: "";
+    position: absolute;
+    left: -3px;
+    right: -3px;
+    height: 1.5px;
+    background: currentColor;
+}
+.mdedit-caret-code::before { top: 0; }
+.mdedit-caret-code::after { bottom: 0; }
+
+@keyframes mdedit-caret-blink {
+    0% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
+/* Inline atoms (math, etc.) — rendered as a single non-selectable unit. The
+   subtle outline appears on hover so users can tell it's interactive. */
+.mdedit-inline-atom {
+    display: inline-block;
+    vertical-align: baseline;
+    line-height: 1;
+    padding: 0 1px;
+    border-radius: 3px;
+    transition: background 100ms ease;
+}
+.mdedit-inline-atom:hover {
+    background: var(--mdedit-atom-hover);
+}
+.mdedit-inline-atom-fallback {
+    color: #b00;
+    font-family: var(--mdedit-font-mono);
+}
+
+.mdedit-math-error {
+    color: #b00;
+    font-family: var(--mdedit-font-mono);
+}
+
+/* Inline-atom popover */
+.mdedit-node-popover {
+    background: var(--mdedit-popover-bg);
+    border: 1px solid var(--mdedit-popover-border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    box-shadow: var(--mdedit-popover-shadow);
+    min-width: 220px;
+    max-width: 480px;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.mdedit-node-popover.editing {
+    border-color: var(--mdedit-popover-focus);
+    box-shadow: 0 4px 16px rgba(74, 140, 255, 0.18);
+}
+.mdedit-node-popover-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+.mdedit-node-popover-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--mdedit-text-muted);
+    user-select: none;
+}
+.mdedit-node-popover-open {
+    font-size: 11px;
+    color: var(--mdedit-link);
+    text-decoration: none;
+    user-select: none;
+}
+.mdedit-node-popover-open:hover {
+    text-decoration: underline;
+}
+.mdedit-node-popover-input {
+    font-family: var(--mdedit-font-mono);
+    font-size: 13px;
+    border: none;
+    outline: none;
+    resize: none;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    color: var(--mdedit-text);
+    line-height: 1.4;
+    width: 100%;
+}
+.mdedit-node-popover-input:read-only {
+    color: var(--mdedit-text-muted);
+    cursor: text;
+}
+
+/* Image popover: two labeled rows (src + alt). */
+.mdedit-image-popover-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+.mdedit-image-popover-row .mdedit-node-popover-label {
+    flex: none;
+    min-width: 2.5em;
+}
+.mdedit-image-popover-row .mdedit-node-popover-input {
+    flex: 1;
+}
+
+/* Block math: atomic block with KaTeX display only. Source lives in
+   metadata.latex and is edited via the popover. */
+.mdedit-math-block {
+    margin: 0.8em 0;
+    padding: 14px 16px;
+    border-radius: 6px;
+    position: relative;
+}
+.mdedit-math-block-display {
+    text-align: center;
+    min-height: 1.4em;
+    overflow-x: auto;
+}
+.mdedit-math-block-anchor {
+    /* Tiny caret-landing anchor under the display. Visually unobtrusive but
+       holds a position the cursor can occupy. */
+    height: 0;
+    margin: 0;
+    padding: 0;
+    line-height: 0;
+    font-size: 0;
+}
+.mdedit-math-empty {
+    color: var(--mdedit-text-muted);
+    font-style: italic;
+    font-size: 13px;
+}
+
+/* Blockquote: one block per quoted line, with `metadata.depth` for nesting.
+   Bars are painted as a repeating vertical-stripe gradient sized so a depth-N
+   block draws exactly N bars at x = 0, step, 2*step, ... . Adjacent blocks
+   share bar x-positions for every shared outer level, so the outer bar reads
+   as one continuous line across nested-block rows — something a per-block
+   border-left can't do because deeper blocks would live at a different left
+   offset. Margins are zero so consecutive blocks butt up pixel-perfect; the
+   outer edges of a run get a small top/bottom margin via the sibling
+   selectors below so the quote doesn't collide with surrounding content. */
+.mdedit-blockquote {
+    --mdedit-quote-step: 1.5em;
+    --mdedit-quote-bar-width: 3px;
+    --mdedit-quote-bar-color: var(--mdedit-quote-bar);
+    margin: 0;
+    /* padding-left equals depth * step (no extra) so each bar position
+       (i * step, i = 0..depth-1) lines up with where the i-th level's text
+       starts. That makes a depth-(N+1) block's deepest bar fall exactly on
+       the depth-N block's text edge above/below it. */
+    padding: 0.05em 0 0.05em
+        calc(var(--mdedit-quote-depth, 1) * var(--mdedit-quote-step));
+    color: var(--mdedit-quote-text);
+    background-image: repeating-linear-gradient(
+        to right,
+        var(--mdedit-quote-bar-color) 0,
+        var(--mdedit-quote-bar-color) var(--mdedit-quote-bar-width),
+        transparent var(--mdedit-quote-bar-width),
+        transparent var(--mdedit-quote-step)
+    );
+    background-repeat: no-repeat;
+    background-size: calc(var(--mdedit-quote-depth, 1) * var(--mdedit-quote-step))
+        100%;
+}
+.mdedit-blockquote:not(.mdedit-blockquote + .mdedit-blockquote) {
+    margin-top: 0.3em;
+}
+.mdedit-blockquote:has(+ :not(.mdedit-blockquote)),
+.mdedit-blockquote:last-child {
+    margin-bottom: 0.3em;
+}
+
+.mdedit-selection-rect {
+    background: var(--mdedit-selection);
+    pointer-events: none;
+}
+
+/* Code block: editable in place. The <code> element carries `data-block-content`
+   so the DOM walker enters it directly. Newlines inside content render as line
+   breaks because of `white-space: pre`. Highlighting tokens come from
+   highlight.js via dangerouslySetInnerHTML; their text content is the source
+   verbatim, which keeps offsets exact. */
+.mdedit-code-block {
+    margin: 0.8em 0;
+    border-radius: 6px;
+    background: var(--mdedit-code-block-bg);
+    border: 1px solid var(--mdedit-code-block-border);
+    overflow: hidden;
+    position: relative;
+}
+.mdedit-code-block-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    padding: 4px 8px;
+    background: var(--mdedit-code-block-toolbar-bg);
+    border-bottom: 1px solid var(--mdedit-code-block-border);
+    user-select: none;
+}
+.mdedit-code-block-lang {
+    font-family: var(--mdedit-font-mono);
+    font-size: 11px;
+    padding: 2px 6px;
+    border: 1px solid var(--mdedit-code-block-border);
+    border-radius: 4px;
+    background: var(--mdedit-popover-bg);
+    color: var(--mdedit-text);
+    cursor: pointer;
+}
+.mdedit-code-block-pre {
+    margin: 0;
+    padding: 12px 14px;
+    overflow-x: auto;
+}
+.mdedit-code-block-code {
+    display: block;
+    font-family: var(--mdedit-font-mono);
+    font-size: 0.9em;
+    line-height: 1.5;
+    color: var(--mdedit-code-block-text);
+    background: transparent;
+    /* `pre` (not `pre-wrap`) so long lines scroll horizontally instead of
+       wrapping — closer to a code editor and avoids the wrap-affinity ambiguity
+       inside what is effectively a single very long logical line. */
+    white-space: pre;
+}
+/* The `data-block-content` element overrides the editor-wide pre-wrap rule
+   above (.mdedit-editor [data-block-content] { white-space: pre-wrap }).
+   Re-declare here so it wins despite specificity ordering. */
+.mdedit-editor [data-block-content].mdedit-code-block-code {
+    white-space: pre;
+}
+
+/* Tables — GFM pipe tables rendered as a real <table>. Cells inherit the
+   editor's normal text styling; the inner data-block-content div is where
+   the caret lands and where inline marks/atoms render. The <table>,
+   <thead>, <tbody>, <tr> wrappers are `data-no-content` so the DOM walker
+   skips them — only the cell content divs are walked. */
+.mdedit-table {
+    margin: 0.8em 0;
+    border-collapse: collapse;
+    width: 100%;
+    border: 1px solid var(--mdedit-table-border);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.mdedit-table thead {
+    background: var(--mdedit-table-header-bg);
+}
+.mdedit-table-cell {
+    border: 1px solid var(--mdedit-table-cell-border);
+    padding: 0;
+    vertical-align: top;
+}
+.mdedit-table-cell-header {
+    font-weight: 600;
+    background: var(--mdedit-table-header-bg);
+}
+.mdedit-table-cell-content {
+    padding: 6px 10px;
+    min-height: 1.6em;
+}
+.mdedit-table-cell-missing {
+    background: repeating-linear-gradient(
+        45deg,
+        transparent 0 6px,
+        rgba(0, 0, 0, 0.04) 6px 12px
+    );
+}
+
+/* highlight.js token colors — minimal light theme inline so the demo doesn't
+   need to load a separate CSS file. Authors can swap in their own theme by
+   targeting `.hljs-*` classes. */
+.hljs-comment, .hljs-quote { color: #6a737d; font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-doctag, .hljs-meta { color: #d73a49; }
+.hljs-string, .hljs-regexp, .hljs-template-string { color: #032f62; }
+.hljs-number, .hljs-symbol, .hljs-bullet { color: #005cc5; }
+.hljs-title, .hljs-section, .hljs-name, .hljs-built_in, .hljs-attr { color: #6f42c1; }
+.hljs-type, .hljs-class .hljs-title { color: #b08800; }
+.hljs-variable, .hljs-template-variable, .hljs-attribute { color: #e36209; }
+.hljs-tag, .hljs-tag .hljs-name { color: #22863a; }
+.hljs-deletion { color: #b31d28; background: #ffeef0; }
+.hljs-addition { color: #22863a; background: #f0fff4; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }

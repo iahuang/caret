@@ -1,0 +1,7 @@
+node_modules
+dist
+.DS_Store
+
+# Rust / Tauri
+apps/*/src-tauri/target
+apps/*/src-tauri/gen

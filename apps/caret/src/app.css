@@ -1,0 +1,180 @@
+@import "tailwindcss";
+
+/*
+ * Dark mode is driven by a `data-theme="dark"` attribute on a root ancestor
+ * (App.tsx puts it on the .caret-root div). This @custom-variant lets
+ * Tailwind utilities like `dark:bg-zinc-900` resolve against that attribute
+ * instead of the prefers-color-scheme media query, so the user's setting
+ * wins regardless of OS preference.
+ */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@font-face {
+    font-family: "Source Serif 4";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("./fonts/source-serif-4/SourceSerif4-Regular.ttf") format("truetype");
+}
+@font-face {
+    font-family: "Source Serif 4";
+    font-style: italic;
+    font-weight: 400;
+    font-display: swap;
+    src: url("./fonts/source-serif-4/SourceSerif4-Italic.ttf") format("truetype");
+}
+@font-face {
+    font-family: "Source Serif 4";
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url("./fonts/source-serif-4/SourceSerif4-Bold.ttf") format("truetype");
+}
+@font-face {
+    font-family: "Source Serif 4";
+    font-style: italic;
+    font-weight: 700;
+    font-display: swap;
+    src: url("./fonts/source-serif-4/SourceSerif4-BoldItalic.ttf") format("truetype");
+}
+
+/*
+ * mdedit theme bridge.
+ *
+ * The editor reads its colors and fonts from `--mdedit-*` variables (see
+ * packages/mdedit/src/react/styles.css). We bind those to the same family
+ * of values caret uses for its chrome, so flipping `data-theme` or
+ * `data-font` on the root updates everything in one place.
+ *
+ * The `--mdedit-font-size` is driven by `--caret-font-size` so the slider
+ * in the settings popover scales both the chrome's reading size cues and
+ * the editor itself.
+ */
+
+:root {
+    --caret-font-size: 16px;
+    --caret-bg: #fafaf8;
+    --caret-surface: #ffffff;
+    --caret-surface-soft: #f7f5f0;
+    --caret-border: #e5e5e0;
+    --caret-text: #1a1a1a;
+    --caret-text-muted: #888;
+    --caret-text-faint: #6b6b6b;
+    --caret-link: #2563eb;
+    --caret-code-bg: rgba(135, 131, 120, 0.15);
+    --caret-quote-bar: #d0d0c8;
+    --caret-quote-text: #555;
+    --caret-code-block-bg: #f6f7f9;
+    --caret-code-block-border: #e3e5ea;
+    --caret-code-block-toolbar-bg: #eef0f4;
+    --caret-table-border: #d8d8d2;
+    --caret-table-cell-border: #e3e3dd;
+    --caret-table-header-bg: #f7f7f2;
+    --caret-selection: rgba(0, 122, 255, 0.25);
+}
+
+[data-theme="dark"] {
+    --caret-bg: #141414;
+    --caret-surface: #1c1c1c;
+    --caret-surface-soft: #181818;
+    --caret-border: #2a2a2a;
+    --caret-text: #e8e8e8;
+    --caret-text-muted: #888;
+    --caret-text-faint: #a0a0a0;
+    --caret-link: #6aa6ff;
+    --caret-code-bg: rgba(255, 255, 255, 0.08);
+    --caret-quote-bar: #3a3a3a;
+    --caret-quote-text: #b8b8b8;
+    --caret-code-block-bg: #1f1f1f;
+    --caret-code-block-border: #2f2f2f;
+    --caret-code-block-toolbar-bg: #262626;
+    --caret-table-border: #2f2f2f;
+    --caret-table-cell-border: #2a2a2a;
+    --caret-table-header-bg: #222222;
+    --caret-selection: rgba(106, 166, 255, 0.3);
+    color-scheme: dark;
+}
+
+[data-font="serif"] {
+    --caret-font-family: "Source Serif 4", "Iowan Old Style", "Palatino", "Georgia", serif;
+}
+[data-font="sans"] {
+    --caret-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+html, body, #root {
+    height: 100%;
+}
+/* App chrome is always the system sans stack — the serif/sans toggle in
+   settings is editor-only, so users picking Source Serif 4 for their prose
+   still see crisp UI text in the header, settings popover, etc. */
+body {
+    margin: 0;
+    background: var(--caret-bg);
+    color: var(--caret-text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Right-align list markers within their fixed-width box so single-character
+   markers (•, 1., 2.) sit close to the content instead of floating at the
+   left edge of the indent. Multi-digit numbers (10., 11., ...) still align
+   cleanly because the right edge is what they share. */
+.mdedit-editor .mdedit-list-marker {
+    text-align: right;
+}
+
+/* mdedit reads these on the editor element; bridge them from the caret vars.
+   --caret-font-family is the editor-only font choice (sans vs serif). */
+.mdedit-editor {
+    --mdedit-font-family: var(--caret-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+    --mdedit-font-size: var(--caret-font-size);
+    --mdedit-text: var(--caret-text);
+    --mdedit-text-muted: var(--caret-text-muted);
+    --mdedit-link: var(--caret-link);
+    --mdedit-link-underline: color-mix(in srgb, var(--caret-link) 40%, transparent);
+    --mdedit-code-bg: var(--caret-code-bg);
+    --mdedit-hr: var(--caret-border);
+    --mdedit-quote-bar: var(--caret-quote-bar);
+    --mdedit-quote-text: var(--caret-quote-text);
+    --mdedit-selection: var(--caret-selection);
+    --mdedit-popover-bg: var(--caret-surface);
+    --mdedit-popover-border: var(--caret-border);
+    --mdedit-popover-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    --mdedit-code-block-bg: var(--caret-code-block-bg);
+    --mdedit-code-block-border: var(--caret-code-block-border);
+    --mdedit-code-block-toolbar-bg: var(--caret-code-block-toolbar-bg);
+    --mdedit-code-block-text: var(--caret-text);
+    --mdedit-table-border: var(--caret-table-border);
+    --mdedit-table-cell-border: var(--caret-table-cell-border);
+    --mdedit-table-header-bg: var(--caret-table-header-bg);
+}
+
+/* In dark mode the default highlight.js token colors blow out — re-tint to a
+   softer palette. Authors can override these further by re-declaring after
+   importing this file. */
+[data-theme="dark"] .hljs-comment,
+[data-theme="dark"] .hljs-quote { color: #8b949e; }
+[data-theme="dark"] .hljs-keyword,
+[data-theme="dark"] .hljs-selector-tag,
+[data-theme="dark"] .hljs-literal,
+[data-theme="dark"] .hljs-doctag,
+[data-theme="dark"] .hljs-meta { color: #ff7b72; }
+[data-theme="dark"] .hljs-string,
+[data-theme="dark"] .hljs-regexp,
+[data-theme="dark"] .hljs-template-string { color: #a5d6ff; }
+[data-theme="dark"] .hljs-number,
+[data-theme="dark"] .hljs-symbol,
+[data-theme="dark"] .hljs-bullet { color: #79c0ff; }
+[data-theme="dark"] .hljs-title,
+[data-theme="dark"] .hljs-section,
+[data-theme="dark"] .hljs-name,
+[data-theme="dark"] .hljs-built_in,
+[data-theme="dark"] .hljs-attr { color: #d2a8ff; }
+[data-theme="dark"] .hljs-type { color: #f0b76b; }
+[data-theme="dark"] .hljs-variable,
+[data-theme="dark"] .hljs-template-variable,
+[data-theme="dark"] .hljs-attribute { color: #ffa657; }
+[data-theme="dark"] .hljs-tag,
+[data-theme="dark"] .hljs-tag .hljs-name { color: #7ee787; }
