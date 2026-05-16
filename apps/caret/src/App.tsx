@@ -1,7 +1,18 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type CSSProperties,
+} from "react";
 import { Code, Pencil, Settings as SettingsIcon } from "lucide-react";
 import { createStore, parseMarkdown, serializeDoc } from "mdedit/core";
+import type { Store } from "mdedit/core";
 import { Editor } from "mdedit/react";
+import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { SettingsPopover, type Settings, defaultSettings, loadSettings, saveSettings } from "./Settings";
 
 // Tauri's draggable-region CSS property isn't in React's CSSProperties type;
@@ -26,6 +37,7 @@ A native markdown editor built on [mdedit](./).
 - **Cmd/Ctrl-Alt-1..6** headings, **-Alt-0** paragraph
 - **Cmd/Ctrl-Shift-8** bullet list, **-Shift-7** ordered list
 - **Cmd/Ctrl-Z** undo, **-Shift-Z** redo
+- **Cmd/Ctrl-N** new file, **-O** open, **-S** save, **-Shift-S** save as
 
 ## Math
 
@@ -59,37 +71,51 @@ function greet(name: string): string {
 Click anywhere, type, select text and hit Cmd-B. The pane on the right is the canonical markdown — what would be saved to disk.
 `;
 
-export function App() {
-    const store = useMemo(() => {
-        const doc = parseMarkdown(INITIAL);
-        return createStore({
-            initialState: {
-                doc,
-                selection: doc[0]
-                    ? {
-                          anchor: { blockId: doc[0].id, offset: 0 },
-                          focus: { blockId: doc[0].id, offset: 0 },
-                      }
-                    : null,
-            },
-        });
-    }, []);
+const MARKDOWN_FILTERS = [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }];
 
-    const [markdown, setMarkdown] = useState(() => serializeDoc(store.getState().doc));
+function makeStore(content: string): Store {
+    const doc = parseMarkdown(content);
+    return createStore({
+        initialState: {
+            doc,
+            selection: doc[0]
+                ? {
+                      anchor: { blockId: doc[0].id, offset: 0 },
+                      focus: { blockId: doc[0].id, offset: 0 },
+                  }
+                : null,
+        },
+    });
+}
+
+function basename(path: string): string {
+    const m = path.match(/[^\\/]+$/);
+    return m ? m[0] : path;
+}
+
+type DiscardAction = "save" | "discard" | "cancel";
+
+export function App() {
+    const [store, setStore] = useState<Store>(() => makeStore(INITIAL));
+    const [storeKey, setStoreKey] = useState(0);
+    const [currentPath, setCurrentPath] = useState<string | null>(null);
+    const [savedMarkdown, setSavedMarkdown] = useState(() => serializeDoc(store.getState().doc));
+    const [markdown, setMarkdown] = useState(savedMarkdown);
 
     useEffect(() => {
+        setMarkdown(serializeDoc(store.getState().doc));
         return store.subscribe(() => {
             setMarkdown(serializeDoc(store.getState().doc));
         });
     }, [store]);
+
+    const isDirty = markdown !== savedMarkdown;
 
     const [settings, setSettings] = useState<Settings>(loadSettings);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [view, setView] = useState<"edit" | "source">("edit");
     const settingsButtonRef = useRef<HTMLButtonElement>(null);
 
-    // Apply settings to the document root so the body bg, font, and editor
-    // theme variables all flip from one source of truth. Persist on change.
     useEffect(() => {
         const root = document.documentElement;
         root.setAttribute("data-theme", settings.theme);
@@ -98,6 +124,143 @@ export function App() {
         saveSettings(settings);
     }, [settings]);
 
+    const [discardPrompt, setDiscardPrompt] = useState<{
+        resolve: (action: DiscardAction) => void;
+    } | null>(null);
+
+    const confirmDiscard = useCallback((): Promise<DiscardAction> => {
+        return new Promise((resolve) => {
+            setDiscardPrompt({
+                resolve: (action) => {
+                    setDiscardPrompt(null);
+                    resolve(action);
+                },
+            });
+        });
+    }, []);
+
+    const loadDoc = useCallback((content: string, path: string | null) => {
+        const next = makeStore(content);
+        const baseline = serializeDoc(next.getState().doc);
+        setStore(next);
+        setCurrentPath(path);
+        setSavedMarkdown(baseline);
+        setMarkdown(baseline);
+        setStoreKey((k) => k + 1);
+    }, []);
+
+    // Action refs let the window-level keydown listener and the close-requested
+    // handler reach the latest closures without re-binding on every keystroke.
+    const actionsRef = useRef<{
+        newFile: () => Promise<void>;
+        openFile: () => Promise<void>;
+        saveFile: () => Promise<boolean>;
+        saveAsFile: () => Promise<boolean>;
+        confirmAndClose: () => Promise<void>;
+    }>({
+        newFile: async () => {},
+        openFile: async () => {},
+        saveFile: async () => false,
+        saveAsFile: async () => false,
+        confirmAndClose: async () => {},
+    });
+
+    actionsRef.current.saveAsFile = async () => {
+        const picked = await saveDialog({
+            defaultPath: currentPath ?? "untitled.md",
+            filters: MARKDOWN_FILTERS,
+        });
+        if (!picked) return false;
+        await writeTextFile(picked, markdown);
+        setCurrentPath(picked);
+        setSavedMarkdown(markdown);
+        return true;
+    };
+
+    actionsRef.current.saveFile = async () => {
+        if (!currentPath) return actionsRef.current.saveAsFile();
+        await writeTextFile(currentPath, markdown);
+        setSavedMarkdown(markdown);
+        return true;
+    };
+
+    actionsRef.current.newFile = async () => {
+        if (isDirty) {
+            const action = await confirmDiscard();
+            if (action === "cancel") return;
+            if (action === "save") {
+                const ok = await actionsRef.current.saveFile();
+                if (!ok) return;
+            }
+        }
+        loadDoc("", null);
+    };
+
+    actionsRef.current.openFile = async () => {
+        if (isDirty) {
+            const action = await confirmDiscard();
+            if (action === "cancel") return;
+            if (action === "save") {
+                const ok = await actionsRef.current.saveFile();
+                if (!ok) return;
+            }
+        }
+        const picked = await openDialog({
+            multiple: false,
+            directory: false,
+            filters: MARKDOWN_FILTERS,
+        });
+        if (typeof picked !== "string") return;
+        const content = await readTextFile(picked);
+        loadDoc(content, picked);
+    };
+
+    actionsRef.current.confirmAndClose = async () => {
+        if (isDirty) {
+            const action = await confirmDiscard();
+            if (action === "cancel") return;
+            if (action === "save") {
+                const ok = await actionsRef.current.saveFile();
+                if (!ok) return;
+            }
+        }
+        await getCurrentWindow().destroy();
+    };
+
+    useEffect(() => {
+        function onKey(e: KeyboardEvent) {
+            const mod = e.metaKey || e.ctrlKey;
+            if (!mod) return;
+            const key = e.key.toLowerCase();
+            if (key === "o" && !e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                void actionsRef.current.openFile();
+            } else if (key === "n" && !e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                void actionsRef.current.newFile();
+            } else if (key === "s" && !e.altKey) {
+                e.preventDefault();
+                if (e.shiftKey) void actionsRef.current.saveAsFile();
+                else void actionsRef.current.saveFile();
+            }
+        }
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, []);
+
+    useEffect(() => {
+        const win = getCurrentWindow();
+        const unlistenPromise = win.onCloseRequested(async (event) => {
+            event.preventDefault();
+            void actionsRef.current.confirmAndClose();
+        });
+        return () => {
+            void unlistenPromise.then((fn) => fn());
+        };
+    }, []);
+
+    const displayName = currentPath ? basename(currentPath) : "untitled.md";
+
     return (
         <div className="flex h-full flex-col bg-[var(--caret-bg)] text-[var(--caret-text)]">
             <header
@@ -105,7 +268,17 @@ export function App() {
                 style={dragStyle}
             >
                 <h1 className="m-0 text-sm font-semibold leading-none">Caret</h1>
-                <span className="text-xs leading-none text-[var(--caret-text-muted)]">untitled.md</span>
+                <span
+                    className="flex items-center gap-1 text-xs leading-none text-[var(--caret-text-muted)]"
+                    title={currentPath ?? "Unsaved buffer"}
+                >
+                    {displayName}
+                    {isDirty && (
+                        <span aria-label="Unsaved changes" className="text-[var(--caret-text-faint)]">
+                            •
+                        </span>
+                    )}
+                </span>
                 <div className="ml-auto flex items-center gap-1.5" style={noDragStyle}>
                     <ViewToggle value={view} onChange={setView} />
                     <button
@@ -123,7 +296,7 @@ export function App() {
             </header>
             <main className="min-h-0 flex-1 overflow-auto bg-[var(--caret-surface)] px-8 py-6">
                 {view === "edit" ? (
-                    <Editor store={store} className="mx-auto max-w-[720px]" />
+                    <Editor key={storeKey} store={store} className="mx-auto max-w-[720px]" />
                 ) : (
                     <pre className="mx-auto m-0 max-w-[720px] whitespace-pre-wrap break-words font-mono text-[13px] leading-[1.55] text-[var(--caret-text-faint)]">
                         {markdown}
@@ -136,6 +309,12 @@ export function App() {
                     settings={settings}
                     onChange={setSettings}
                     onClose={() => setSettingsOpen(false)}
+                />
+            )}
+            {discardPrompt && (
+                <UnsavedChangesDialog
+                    filename={displayName}
+                    onAction={discardPrompt.resolve}
                 />
             )}
         </div>
@@ -173,6 +352,76 @@ function ViewToggle({ value, onChange }: { value: "edit" | "source"; onChange: (
                 <Code size={12} strokeWidth={1.75} aria-hidden="true" />
                 Source
             </button>
+        </div>
+    );
+}
+
+function UnsavedChangesDialog({
+    filename,
+    onAction,
+}: {
+    filename: string;
+    onAction: (action: DiscardAction) => void;
+}) {
+    const saveBtnRef = useRef<HTMLButtonElement>(null);
+
+    useEffect(() => {
+        saveBtnRef.current?.focus();
+        function onKey(e: KeyboardEvent) {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                onAction("cancel");
+            } else if (e.key === "Enter") {
+                e.preventDefault();
+                onAction("save");
+            }
+        }
+        window.addEventListener("keydown", onKey, true);
+        return () => window.removeEventListener("keydown", onKey, true);
+    }, [onAction]);
+
+    return (
+        <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="unsaved-dialog-title"
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 backdrop-blur-sm"
+            onMouseDown={(e) => {
+                if (e.target === e.currentTarget) onAction("cancel");
+            }}
+        >
+            <div className="w-[360px] rounded-lg border border-[var(--caret-border)] bg-[var(--caret-surface)] p-5 text-[var(--caret-text)] shadow-2xl">
+                <div id="unsaved-dialog-title" className="mb-1 text-sm font-semibold">
+                    Save changes to {filename}?
+                </div>
+                <p className="mb-5 text-xs leading-relaxed text-[var(--caret-text-muted)]">
+                    Your changes will be lost if you don't save them.
+                </p>
+                <div className="flex items-center justify-end gap-2">
+                    <button
+                        type="button"
+                        onClick={() => onAction("discard")}
+                        className="rounded-md px-3 py-1.5 text-xs text-[var(--caret-text-faint)] transition-colors hover:bg-[var(--caret-border)] hover:text-[var(--caret-text)] focus:outline-none focus:ring-1 focus:ring-[var(--caret-link)]"
+                    >
+                        Don't save
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => onAction("cancel")}
+                        className="rounded-md border border-[var(--caret-border)] bg-[var(--caret-surface-soft)] px-3 py-1.5 text-xs text-[var(--caret-text)] transition-colors hover:bg-[var(--caret-border)] focus:outline-none focus:ring-1 focus:ring-[var(--caret-link)]"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        ref={saveBtnRef}
+                        type="button"
+                        onClick={() => onAction("save")}
+                        className="rounded-md bg-[var(--caret-link)] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[var(--caret-link)] focus:ring-offset-1"
+                    >
+                        Save
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }

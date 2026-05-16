@@ -13,6 +13,8 @@
     },
     "dependencies": {
         "@tauri-apps/api": "^2.1.1",
+        "@tauri-apps/plugin-dialog": "^2.7.1",
+        "@tauri-apps/plugin-fs": "^2.5.1",
         "katex": "^0.16.46",
         "lucide-react": "^1.16.0",
         "mdedit": "workspace:*",
