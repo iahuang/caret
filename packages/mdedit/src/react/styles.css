@@ -372,6 +372,11 @@
     font-style: italic;
     font-size: 13px;
 }
+/* Inline variant: sits within prose at the surrounding font, so size scales
+   relative (em) instead of pinning to a block-friendly 13px. */
+.mdedit-math-empty-inline {
+    font-size: 0.85em;
+}
 
 /* Blockquote: one block per quoted line, with `metadata.depth` for nesting.
    Bars are painted as a repeating vertical-stripe gradient sized so a depth-N

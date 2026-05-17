@@ -54,7 +54,7 @@ import {
 import { parseMarkdown } from "../core/markdown/parse";
 import { serializeDoc } from "../core/markdown/serialize";
 import type { Store } from "../core/store";
-import { findBlockIndex, generateId } from "../core/transform";
+import { deleteRangeInBlock, findBlockIndex, generateId } from "../core/transform";
 import type { Block, InlineNode, Mark } from "../core/types";
 import { isCollapsed } from "../core/types";
 import { RenderedBlocks } from "./BlockView";
@@ -112,6 +112,19 @@ interface PopoverRenderBase {
     onDoneEditing: () => void;
     onExitLeft: () => void;
     onExitRight: () => void;
+    /**
+     * Remove the target from the document entirely. For inline atoms, drops
+     * the atom + its placeholder character and parks the caret at the
+     * atom's former position. For block targets, splices the block out and
+     * lands the caret at the end of the previous block (or start of the
+     * next if the deleted block was first; or in a fresh empty paragraph
+     * if it was the only block). For links, strips the link mark. Closes
+     * the popover and returns focus to the editor.
+     *
+     * Typical use: backspace inside an empty popover textarea — gives the
+     * user a fast undo for a node they just created and didn't fill in.
+     */
+    onDelete: () => void;
 }
 
 export type PopoverRenderContext = PopoverRenderBase &
@@ -608,6 +621,81 @@ export function Editor({
         [popoverTarget, store],
     );
 
+    // Remove the popover's target from the doc and return focus to the editor.
+    // For inline atoms: drop the atom + placeholder char; caret to where the
+    // atom was. For blocks: splice the block out; caret to end of prev (or
+    // start of next if first; or a fresh paragraph if the block was alone).
+    // For links: strip the mark only — the labeled text remains in place.
+    const deletePopoverTarget = useCallback(() => {
+        if (!popoverTarget) return;
+        if (popoverTarget.kind === "inline") {
+            const { atom, blockId } = popoverTarget;
+            store.setState((s) => {
+                const idx = findBlockIndex(s.doc, blockId);
+                if (idx < 0) return s;
+                const b = s.doc[idx]!;
+                if (!b.inlineNodes?.some((n) => n.id === atom.id)) return s;
+                const next = deleteRangeInBlock(b, atom.position, atom.position + 1);
+                const doc = s.doc.slice();
+                doc[idx] = next;
+                return {
+                    ...s,
+                    doc,
+                    selection: {
+                        anchor: { blockId, offset: atom.position },
+                        focus: { blockId, offset: atom.position },
+                    },
+                    storedMarks: null,
+                };
+            });
+        } else if (popoverTarget.kind === "block") {
+            const blockId = popoverTarget.block.id;
+            store.setState((s) => {
+                const idx = findBlockIndex(s.doc, blockId);
+                if (idx < 0) return s;
+                const doc = s.doc.slice();
+                doc.splice(idx, 1);
+                let target: { blockId: string; offset: number };
+                if (idx > 0) {
+                    const prev = doc[idx - 1]!;
+                    target = { blockId: prev.id, offset: prev.content.length };
+                } else if (doc.length > 0) {
+                    const next = doc[0]!;
+                    target = { blockId: next.id, offset: 0 };
+                } else {
+                    const para: Block = {
+                        id: generateId(),
+                        type: "paragraph",
+                        content: "",
+                        marks: [],
+                    };
+                    doc.push(para);
+                    target = { blockId: para.id, offset: 0 };
+                }
+                return {
+                    ...s,
+                    doc,
+                    selection: { anchor: target, focus: target },
+                    storedMarks: null,
+                };
+            });
+        } else {
+            const linkId = popoverTarget.id;
+            store.setState((s) => {
+                const doc = s.doc.map((b) => {
+                    const filtered = b.marks.filter(
+                        (m) => !(m.type === "link" && m.attrs?.linkId === linkId),
+                    );
+                    if (filtered.length === b.marks.length) return b;
+                    return { ...b, marks: filtered };
+                });
+                return { ...s, doc, storedMarks: null };
+            });
+        }
+        setEditingId(null);
+        inputRef.current?.focus({ preventScroll: true });
+    }, [popoverTarget, store]);
+
     const popoverElement = useMemo(() => {
         if (!popoverTarget) return null;
         const onDoneEditing = () => {
@@ -627,6 +715,7 @@ export function Editor({
                 onDoneEditing,
                 onExitLeft,
                 onExitRight,
+                onDelete: deletePopoverTarget,
             };
             let ctx: PopoverRenderContext;
             if (popoverTarget.kind === "inline") {
@@ -743,7 +832,7 @@ export function Editor({
                 anchorAlignment="center"
             />
         );
-    }, [popoverTarget, editingId, exitPopover, store, renderPopover]);
+    }, [popoverTarget, editingId, exitPopover, deletePopoverTarget, store, renderPopover]);
 
     return (
         <div

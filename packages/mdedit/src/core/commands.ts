@@ -721,6 +721,7 @@ export function insertInlineNode(
     state: DocState,
     type: string,
     data: Record<string, unknown>,
+    atomId?: string,
 ): DocState {
     if (!state.selection) return state;
     let next: DocState = state;
@@ -729,8 +730,14 @@ export function insertInlineNode(
     const idx = findBlockIndex(next.doc, sel.anchor.blockId);
     if (idx < 0) return next;
     const block = next.doc[idx]!;
+    // Atomic blocks (math-block, hr) and source-mode blocks (code-block)
+    // don't carry inline content, so embedding an atom would break their
+    // invariants. Bail silently rather than enter a corrupt state.
+    if (block.type === "math-block" || block.type === "code-block" || block.type === "hr") {
+        return state;
+    }
     const at = sel.anchor.offset;
-    const atom: InlineNode = { id: generateId(), type, position: at, data };
+    const atom: InlineNode = { id: atomId ?? generateId(), type, position: at, data };
     const newContent =
         block.content.slice(0, at) + INLINE_NODE_PLACEHOLDER + block.content.slice(at);
     const newMarks = adjustMarksForInsert(block.marks, at, 1);
@@ -921,6 +928,35 @@ export function applyMarkdownShortcuts(state: DocState): DocState {
         return {
             doc,
             selection: collapsedAt({ blockId: para.id, offset: 0 }),
+            storedMarks: null,
+        };
+    }
+
+    // Math-block shortcut: a paragraph whose entire content is `$$` becomes
+    // an empty math-block (plus a trailing paragraph for further typing).
+    // The editor's existing math-block detection auto-opens the popover as
+    // soon as the cursor lands inside the new block, so the user just keeps
+    // typing LaTeX. Fires after the second `$` is typed — the inline
+    // `$...$` shortcut intentionally skips `$$` pairs (see `tryMathShortcut`),
+    // so the two paths don't conflict.
+    if (
+        block.type === "paragraph" &&
+        pos.offset === block.content.length &&
+        block.content === "$$"
+    ) {
+        const math: Block = {
+            id: generateId(),
+            type: "math-block",
+            content: "",
+            marks: [],
+            metadata: { latex: "" },
+        };
+        const para: Block = { id: generateId(), type: "paragraph", content: "", marks: [] };
+        const doc = state.doc.slice();
+        doc.splice(idx, 1, math, para);
+        return {
+            doc,
+            selection: collapsedAt({ blockId: math.id, offset: 0 }),
             storedMarks: null,
         };
     }

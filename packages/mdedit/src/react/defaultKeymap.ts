@@ -25,6 +25,7 @@ import {
     findWordBoundaryForward,
     indentBlock,
     insertBreak,
+    insertInlineNode,
     insertText,
     setBlockType,
     toggleMark,
@@ -438,6 +439,29 @@ export const defaultKeymap: KeyBinding[] = [
             const linkId = generateId();
             store.setState((s) => wrapSelectionInLink(s, "", linkId));
             actions.requestEditing(linkId);
+            return true;
+        },
+    },
+
+    // ---- Inline math ----
+    // Cmd-Shift-M: insert an empty inline math atom at the caret and open
+    // its popover in edit mode. Mirrors the link flow (Cmd-K): atom id is
+    // generated up front so the same id can be handed to requestEditing.
+    {
+        match: (e) => mod(e) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "m",
+        run: ({ store, actions }) => {
+            const state = store.getState();
+            if (!state.selection) return true;
+            const sel = state.selection;
+            const block = state.doc.find((b) => b.id === sel.focus.blockId);
+            // Same blocklist as insertInlineNode — bail before generating an
+            // id so we don't leave a dangling requestEditing target.
+            if (!block || block.type === "math-block" || block.type === "code-block" || block.type === "hr") {
+                return true;
+            }
+            const atomId = generateId();
+            store.setState((s) => insertInlineNode(s, "math", { latex: "" }, atomId));
+            actions.requestEditing(atomId);
             return true;
         },
     },

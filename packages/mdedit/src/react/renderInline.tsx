@@ -57,6 +57,7 @@ export const defaultMarkRenderers: MarkRenderer[] = [
 
 function InlineMath({ latex }: { latex: string }) {
     const html = useMemo(() => {
+        if (!latex.trim()) return "";
         try {
             return katex.renderToString(latex, {
                 displayMode: false,
@@ -67,6 +68,9 @@ function InlineMath({ latex }: { latex: string }) {
             return `<span class="mdedit-math-error">${escapeHtml(latex)}</span>`;
         }
     }, [latex]);
+    if (!html) {
+        return <span className="mdedit-math-empty mdedit-math-empty-inline">(math)</span>;
+    }
     return <span dangerouslySetInnerHTML={{ __html: html }} />;
 }
 

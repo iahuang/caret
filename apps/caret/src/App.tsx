@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Code, Pencil, Settings as SettingsIcon } from "lucide-react";
 import { createStore, parseMarkdown, serializeDoc } from "mdedit/core";
 import type { Store } from "mdedit/core";
-import { Editor, defaultRenderers } from "mdedit/react";
+import { Editor, defaultRenderers, type PopoverRenderer } from "mdedit/react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { getCurrentWindow, LogicalPosition } from "@tauri-apps/api/window";
@@ -10,6 +10,7 @@ import { WebviewWindow, getCurrentWebviewWindow } from "@tauri-apps/api/webviewW
 import { SettingsPopover, type Settings, defaultSettings, loadSettings, saveSettings } from "./Settings";
 import { caretCodeBlockRenderer } from "./CodeBlockRenderer";
 import { caretTableCellRenderer } from "./TableRenderer";
+import { CaretMathPopover } from "./CaretMathPopover";
 
 const INITIAL = `# Caret
 
@@ -131,6 +132,48 @@ export function App() {
             "code-block": caretCodeBlockRenderer,
             "table-cell": caretTableCellRenderer,
         }),
+        [],
+    );
+
+    const renderPopover = useMemo<PopoverRenderer>(
+        () => (ctx) => {
+            if (ctx.kind === "block" && ctx.block.type === "math-block") {
+                const latex = (ctx.block.metadata?.latex as string | undefined) ?? "";
+                return (
+                    <CaretMathPopover
+                        anchorSelector={`[data-block-id="${ctx.block.id}"]`}
+                        value={latex}
+                        editing={ctx.editing}
+                        onChange={(next) => ctx.onChange({ latex: next })}
+                        onStartEditing={ctx.onStartEditing}
+                        onDoneEditing={ctx.onDoneEditing}
+                        onExitLeft={ctx.onExitLeft}
+                        onExitRight={ctx.onExitRight}
+                        onDelete={ctx.onDelete}
+                        containerRef={ctx.containerRef}
+                        anchorAlignment="center"
+                    />
+                );
+            }
+            if (ctx.kind === "inline" && ctx.atom.type === "math") {
+                const latex = (ctx.atom.data.latex as string | undefined) ?? "";
+                return (
+                    <CaretMathPopover
+                        anchorSelector={`[data-atom-id="${ctx.atom.id}"]`}
+                        value={latex}
+                        editing={ctx.editing}
+                        onChange={(next) => ctx.onChange({ latex: next })}
+                        onStartEditing={ctx.onStartEditing}
+                        onDoneEditing={ctx.onDoneEditing}
+                        onExitLeft={ctx.onExitLeft}
+                        onExitRight={ctx.onExitRight}
+                        onDelete={ctx.onDelete}
+                        containerRef={ctx.containerRef}
+                    />
+                );
+            }
+            return undefined;
+        },
         [],
     );
 
@@ -325,6 +368,7 @@ export function App() {
                         key={storeKey}
                         store={store}
                         renderers={editorRenderers}
+                        renderPopover={renderPopover}
                         className="mx-auto max-w-[720px]"
                     />
                 ) : (
