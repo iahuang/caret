@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Code, Pencil, Settings as SettingsIcon } from "lucide-react";
 import { createStore, parseMarkdown, serializeDoc } from "mdedit/core";
 import type { Store } from "mdedit/core";
-import { Editor } from "mdedit/react";
+import { Editor, defaultRenderers } from "mdedit/react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { SettingsPopover, type Settings, defaultSettings, loadSettings, saveSettings } from "./Settings";
+import { caretCodeBlockRenderer } from "./CodeBlockRenderer";
 
 const INITIAL = `# Caret
 
@@ -101,8 +102,30 @@ export function App() {
 
     const [settings, setSettings] = useState<Settings>(loadSettings);
     const [settingsOpen, setSettingsOpen] = useState(false);
-    const [view, setView] = useState<"edit" | "source">("edit");
+    const [view, setView] = useState<"rich" | "raw">("rich");
     const settingsButtonRef = useRef<HTMLButtonElement>(null);
+
+    const editorRenderers = useMemo(
+        () => ({ ...defaultRenderers, "code-block": caretCodeBlockRenderer }),
+        [],
+    );
+
+    const handleViewChange = useCallback(
+        (next: "rich" | "raw") => {
+            setView((prev) => {
+                if (prev === "raw" && next === "rich") {
+                    const fromStore = serializeDoc(store.getState().doc);
+                    if (markdown !== fromStore) {
+                        const replacement = makeStore(markdown);
+                        setStore(replacement);
+                        setStoreKey((k) => k + 1);
+                    }
+                }
+                return next;
+            });
+        },
+        [markdown, store],
+    );
 
     useEffect(() => {
         const root = document.documentElement;
@@ -247,13 +270,13 @@ export function App() {
         };
     }, []);
 
-    const displayName = currentPath ? basename(currentPath) : "untitled.md";
+    const displayName = currentPath ? basename(currentPath) : "Untitled";
 
     return (
         <div className="flex h-full flex-col bg-caret-bg text-caret-text">
             <header
                 data-tauri-drag-region
-                className="flex items-center gap-3 border-b border-caret-border bg-caret-surface py-[7px] pl-[92px] pr-3"
+                className="flex items-center gap-3 bg-caret-surface py-[7px] pl-[92px] pr-3"
             >
                 <span
                     data-tauri-drag-region
@@ -272,7 +295,7 @@ export function App() {
                     )}
                 </span>
                 <div data-tauri-drag-region className="ml-auto flex items-center gap-1.5">
-                    <ViewToggle value={view} onChange={setView} />
+                    <ViewToggle value={view} onChange={handleViewChange} />
                     <button
                         ref={settingsButtonRef}
                         type="button"
@@ -286,13 +309,16 @@ export function App() {
                     </button>
                 </div>
             </header>
-            <main className="min-h-0 flex-1 overflow-auto bg-caret-surface px-8 py-6">
-                {view === "edit" ? (
-                    <Editor key={storeKey} store={store} className="mx-auto max-w-[720px]" />
+            <main className="min-h-0 flex-1 overflow-auto bg-caret-surface px-8 py-10">
+                {view === "rich" ? (
+                    <Editor
+                        key={storeKey}
+                        store={store}
+                        renderers={editorRenderers}
+                        className="mx-auto max-w-[720px]"
+                    />
                 ) : (
-                    <pre className="mx-auto m-0 max-w-[720px] whitespace-pre-wrap break-words font-mono text-[13px] leading-[1.55] text-caret-text-faint">
-                        {markdown}
-                    </pre>
+                    <SourceEditor value={markdown} onChange={setMarkdown} />
                 )}
             </main>
             {settingsOpen && (
@@ -313,7 +339,7 @@ export function App() {
     );
 }
 
-function ViewToggle({ value, onChange }: { value: "edit" | "source"; onChange: (v: "edit" | "source") => void }) {
+function ViewToggle({ value, onChange }: { value: "rich" | "raw"; onChange: (v: "rich" | "raw") => void }) {
     const baseClass =
         "flex h-6 items-center gap-1.5 px-2 text-[11px] font-medium leading-none transition-colors focus:outline-none focus:ring-1 focus:ring-caret-link";
     const activeClass = "bg-caret-border text-caret-text";
@@ -327,24 +353,43 @@ function ViewToggle({ value, onChange }: { value: "edit" | "source"; onChange: (
             <button
                 type="button"
                 role="tab"
-                aria-selected={value === "edit"}
-                onClick={() => onChange("edit")}
-                className={`${baseClass} ${value === "edit" ? activeClass : inactiveClass}`}
+                aria-selected={value === "rich"}
+                onClick={() => onChange("rich")}
+                className={`${baseClass} ${value === "rich" ? activeClass : inactiveClass}`}
             >
                 <Pencil size={12} strokeWidth={1.75} aria-hidden="true" />
-                Edit
             </button>
             <button
                 type="button"
                 role="tab"
-                aria-selected={value === "source"}
-                onClick={() => onChange("source")}
-                className={`${baseClass} border-l border-caret-border ${value === "source" ? activeClass : inactiveClass}`}
+                aria-selected={value === "raw"}
+                onClick={() => onChange("raw")}
+                className={`${baseClass} border-l border-caret-border ${value === "raw" ? activeClass : inactiveClass}`}
             >
                 <Code size={12} strokeWidth={1.75} aria-hidden="true" />
-                Source
             </button>
         </div>
+    );
+}
+
+function SourceEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+    const ref = useRef<HTMLTextAreaElement>(null);
+
+    useLayoutEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        el.style.height = "auto";
+        el.style.height = `${el.scrollHeight}px`;
+    }, [value]);
+
+    return (
+        <textarea
+            ref={ref}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            spellCheck={false}
+            className="mx-auto block w-full max-w-[720px] resize-none whitespace-pre-wrap break-words border-0 bg-transparent p-0 font-mono text-[13px] leading-[1.55] outline-none focus:outline-none focus:ring-0"
+        />
     );
 }
 

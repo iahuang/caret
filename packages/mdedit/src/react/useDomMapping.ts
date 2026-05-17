@@ -235,7 +235,15 @@ function charRectAt(blockEl: HTMLElement, m: number): DOMRect | null {
                     pos += len;
                     return;
                 }
-                for (const r of Array.from(range.getClientRects())) {
+                // Walk the rect list in reverse. When the probe range starts at
+                // a visual line break (e.g. inside a <pre>, right after a "\n"),
+                // browsers emit a phantom zero/height rect at the end of the
+                // prior line first; the actual glyph rect is last. Picking the
+                // first non-empty rect mis-locates the caret at end-of-content
+                // in a code-block.
+                const rects = range.getClientRects();
+                for (let i = rects.length - 1; i >= 0; i--) {
+                    const r = rects[i]!;
                     if (r.width > 0 || r.height > 0) {
                         result = r;
                         return;
