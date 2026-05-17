@@ -27,6 +27,17 @@
  *     Escape dismisses the menu (without exiting the popover).
  *   - Any cursor movement (arrow Left/Right, Home/End, click) invalidates
  *     the menu — the user has to type a fresh `\` to reopen.
+ *
+ * Auto-closing brackets (`{}`, `[]`, `()`):
+ *   - Typing an opener with a collapsed caret inserts the pair and parks
+ *     the caret between them.
+ *   - Typing an opener with a non-empty selection wraps the selection;
+ *     the selection is preserved over the wrapped text.
+ *   - Typing a closer when the next character is the same closer skips
+ *     over it instead of doubling up (the natural follow-through after
+ *     filling in a pair).
+ *   - Backspace with the caret immediately between a matched pair deletes
+ *     both characters at once.
  */
 
 import {
@@ -61,6 +72,12 @@ export interface CaretMathPopoverProps {
 
 const MAX_SUGGESTIONS = 8;
 const COMMAND_CHAR = /[a-zA-Z]/;
+const AUTOCLOSE_PAIRS: Readonly<Record<string, string>> = {
+    "{": "}",
+    "[": "]",
+    "(": ")",
+};
+const AUTOCLOSE_CLOSERS = new Set(Object.values(AUTOCLOSE_PAIRS));
 
 interface Query {
     /** Index of the `\` that started the command. */
@@ -96,11 +113,14 @@ export function CaretMathPopover({
     const [caret, setCaret] = useState(0);
     const [menuOpen, setMenuOpen] = useState(false);
     const [menuIndex, setMenuIndex] = useState(0);
-    // After an autocomplete accept, the textarea's selection has to be
-    // repositioned past the inserted text — but the value prop updates
-    // asynchronously, so we stash the target offset and apply it in a
-    // post-render effect.
-    const [pendingCaret, setPendingCaret] = useState<number | null>(null);
+    // After an autocomplete accept or auto-close, the textarea's selection
+    // has to be repositioned around the just-inserted text — but the value
+    // prop updates asynchronously, so we stash the target range and apply
+    // it in a post-render effect. Range form (start may equal end for a
+    // collapsed caret, or differ for wrap-preserves-selection).
+    const [pendingSelection, setPendingSelection] = useState<
+        { start: number; end: number } | null
+    >(null);
 
     useEffect(() => {
         if (editingSessionId < 0) return;
@@ -112,13 +132,14 @@ export function CaretMathPopover({
     }, [editingSessionId]);
 
     useLayoutEffect(() => {
-        if (pendingCaret === null) return;
+        if (pendingSelection === null) return;
         const ta = textareaRef.current;
         if (!ta) return;
-        ta.selectionStart = ta.selectionEnd = pendingCaret;
-        setCaret(pendingCaret);
-        setPendingCaret(null);
-    }, [pendingCaret, value]);
+        ta.selectionStart = pendingSelection.start;
+        ta.selectionEnd = pendingSelection.end;
+        setCaret(pendingSelection.start);
+        setPendingSelection(null);
+    }, [pendingSelection, value]);
 
     const query = useMemo<Query | null>(() => {
         if (!menuOpen) return null;
@@ -156,7 +177,8 @@ export function CaretMathPopover({
             const caretInside = arity > 0 ? cmd.length + 1 : cmd.length;
             const next = value.slice(0, query.start) + insertion + value.slice(query.end);
             onChange(next);
-            setPendingCaret(query.start + caretInside);
+            const caretAt = query.start + caretInside;
+            setPendingSelection({ start: caretAt, end: caretAt });
             setMenuOpen(false);
         },
         [query, value, onChange],
@@ -220,6 +242,70 @@ export function CaretMathPopover({
                             onDelete();
                             return;
                         }
+
+                        // Auto-closing brackets. Reads textarea selection
+                        // directly so it works regardless of whether `caret`
+                        // state has caught up with the latest user input.
+                        {
+                            const ta = e.currentTarget;
+                            const selStart = ta.selectionStart;
+                            const selEnd = ta.selectionEnd;
+
+                            // Type opener: insert pair (or wrap selection).
+                            const closer = AUTOCLOSE_PAIRS[e.key];
+                            if (closer !== undefined) {
+                                e.preventDefault();
+                                const inner = value.slice(selStart, selEnd);
+                                const next =
+                                    value.slice(0, selStart) +
+                                    e.key +
+                                    inner +
+                                    closer +
+                                    value.slice(selEnd);
+                                onChange(next);
+                                setPendingSelection({
+                                    start: selStart + 1,
+                                    end: selEnd + 1,
+                                });
+                                return;
+                            }
+
+                            // Type matching closer with the same closer
+                            // immediately to the right: skip over it instead
+                            // of doubling up.
+                            if (
+                                AUTOCLOSE_CLOSERS.has(e.key) &&
+                                selStart === selEnd &&
+                                value[selStart] === e.key
+                            ) {
+                                e.preventDefault();
+                                setPendingSelection({
+                                    start: selStart + 1,
+                                    end: selStart + 1,
+                                });
+                                return;
+                            }
+
+                            // Backspace immediately between a matched pair:
+                            // delete both characters at once.
+                            if (
+                                e.key === "Backspace" &&
+                                selStart === selEnd &&
+                                selStart > 0 &&
+                                AUTOCLOSE_PAIRS[value[selStart - 1]!] === value[selStart]
+                            ) {
+                                e.preventDefault();
+                                const next =
+                                    value.slice(0, selStart - 1) + value.slice(selStart + 1);
+                                onChange(next);
+                                setPendingSelection({
+                                    start: selStart - 1,
+                                    end: selStart - 1,
+                                });
+                                return;
+                            }
+                        }
+
                         if (menuOpen && suggestions.length > 0) {
                             if (e.key === "Tab" || e.key === "Enter") {
                                 e.preventDefault();
