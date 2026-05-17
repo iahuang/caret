@@ -102,6 +102,23 @@
     --caret-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
+/*
+ * Expose the caret palette to Tailwind as named color tokens so components
+ * can use `bg-caret-surface`, `text-caret-text`, `border-caret-border`, etc.
+ * instead of `bg-[var(--caret-surface)]`. `@theme inline` keeps the value as
+ * a `var()` reference, so flipping `data-theme="dark"` still cascades.
+ */
+@theme inline {
+    --color-caret-bg: var(--caret-bg);
+    --color-caret-surface: var(--caret-surface);
+    --color-caret-surface-soft: var(--caret-surface-soft);
+    --color-caret-border: var(--caret-border);
+    --color-caret-text: var(--caret-text);
+    --color-caret-text-muted: var(--caret-text-muted);
+    --color-caret-text-faint: var(--caret-text-faint);
+    --color-caret-link: var(--caret-link);
+}
+
 html, body, #root {
     height: 100%;
 }

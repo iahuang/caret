@@ -108,14 +108,14 @@ export function SettingsPopover({ anchorRef, settings, onChange, onClose }: Sett
             ref={popoverRef}
             role="dialog"
             aria-label="Settings"
-            className="fixed z-50 w-64 rounded-lg border border-[var(--caret-border)] bg-[var(--caret-surface)] p-4 text-[var(--caret-text)] shadow-xl"
+            className="fixed z-50 w-64 rounded-lg border border-caret-border bg-caret-surface p-4 text-caret-text shadow-xl"
             style={{
                 top: pos?.top ?? -9999,
                 left: pos?.left ?? -9999,
                 visibility: pos ? "visible" : "hidden",
             }}
         >
-            <div className="mb-4 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--caret-text-muted)]">
+            <div className="mb-4 text-[11px] font-medium uppercase tracking-[0.08em] text-caret-text-muted">
                 Settings
             </div>
 
@@ -151,7 +151,7 @@ export function SettingsPopover({ anchorRef, settings, onChange, onClose }: Sett
                     onChange={(e) =>
                         onChange({ ...settings, fontSize: clampFont(Number(e.target.value)) })
                     }
-                    className="w-full accent-[var(--caret-link)]"
+                    className="w-full accent-caret-link"
                     aria-label="Base font size"
                 />
             </Row>
@@ -162,7 +162,7 @@ export function SettingsPopover({ anchorRef, settings, onChange, onClose }: Sett
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
     return (
         <div className="mb-3 last:mb-0">
-            <div className="mb-1.5 text-xs text-[var(--caret-text-faint)]">{label}</div>
+            <div className="mb-1.5 text-xs text-caret-text-faint">{label}</div>
             {children}
         </div>
     );
@@ -176,7 +176,7 @@ interface SegmentedProps<T extends string> {
 
 function Segmented<T extends string>({ value, options, onChange }: SegmentedProps<T>) {
     return (
-        <div className="inline-flex w-full rounded-md border border-[var(--caret-border)] bg-[var(--caret-surface-soft)] p-0.5">
+        <div className="inline-flex w-full rounded-md border border-caret-border bg-caret-surface-soft p-0.5">
             {options.map((o) => {
                 const active = o.value === value;
                 return (
@@ -187,8 +187,8 @@ function Segmented<T extends string>({ value, options, onChange }: SegmentedProp
                         className={
                             "flex-1 rounded px-2 py-1 text-xs transition-colors " +
                             (active
-                                ? "bg-[var(--caret-surface)] text-[var(--caret-text)] shadow-sm"
-                                : "text-[var(--caret-text-faint)] hover:text-[var(--caret-text)]")
+                                ? "bg-caret-surface text-caret-text shadow-sm"
+                                : "text-caret-text-faint hover:text-caret-text")
                         }
                         aria-pressed={active}
                     >

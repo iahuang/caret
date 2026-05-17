@@ -1,11 +1,4 @@
-import {
-    useCallback,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-    type CSSProperties,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Code, Pencil, Settings as SettingsIcon } from "lucide-react";
 import { createStore, parseMarkdown, serializeDoc } from "mdedit/core";
 import type { Store } from "mdedit/core";
@@ -14,11 +7,6 @@ import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialo
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { SettingsPopover, type Settings, defaultSettings, loadSettings, saveSettings } from "./Settings";
-
-// Tauri's draggable-region CSS property isn't in React's CSSProperties type;
-// build the styles via a small cast helper so we don't litter `as any` calls.
-const dragStyle = { WebkitAppRegion: "drag" } as unknown as CSSProperties;
-const noDragStyle = { WebkitAppRegion: "no-drag" } as unknown as CSSProperties;
 
 const INITIAL = `# Caret
 
@@ -262,24 +250,28 @@ export function App() {
     const displayName = currentPath ? basename(currentPath) : "untitled.md";
 
     return (
-        <div className="flex h-full flex-col bg-[var(--caret-bg)] text-[var(--caret-text)]">
+        <div className="flex h-full flex-col bg-caret-bg text-caret-text">
             <header
-                className="flex items-center gap-3 border-b border-[var(--caret-border)] bg-[var(--caret-surface)] py-[7px] pl-[92px] pr-3"
-                style={dragStyle}
+                data-tauri-drag-region
+                className="flex items-center gap-3 border-b border-caret-border bg-caret-surface py-[7px] pl-[92px] pr-3"
             >
-                <h1 className="m-0 text-sm font-semibold leading-none">Caret</h1>
                 <span
-                    className="flex items-center gap-1 text-xs leading-none text-[var(--caret-text-muted)]"
+                    data-tauri-drag-region
+                    className="flex items-center gap-1 text-xs leading-none text-caret-text-muted"
                     title={currentPath ?? "Unsaved buffer"}
                 >
                     {displayName}
                     {isDirty && (
-                        <span aria-label="Unsaved changes" className="text-[var(--caret-text-faint)]">
-                            •
+                        <span
+                            data-tauri-drag-region
+                            aria-label="Unsaved changes"
+                            className="bg-caret-text-faint w-1 h-1 rounded-full"
+                        >
+
                         </span>
                     )}
                 </span>
-                <div className="ml-auto flex items-center gap-1.5" style={noDragStyle}>
+                <div data-tauri-drag-region className="ml-auto flex items-center gap-1.5">
                     <ViewToggle value={view} onChange={setView} />
                     <button
                         ref={settingsButtonRef}
@@ -288,17 +280,17 @@ export function App() {
                         aria-haspopup="dialog"
                         aria-expanded={settingsOpen}
                         onClick={() => setSettingsOpen((v) => !v)}
-                        className="flex h-6 w-6 items-center justify-center rounded-md text-[var(--caret-text-faint)] transition-colors hover:bg-[var(--caret-border)] hover:text-[var(--caret-text)] focus:outline-none focus:ring-1 focus:ring-[var(--caret-link)]"
+                        className="flex h-6 w-6 items-center justify-center rounded-md text-caret-text-faint transition-colors hover:bg-caret-border hover:text-caret-text focus:outline-none focus:ring-1 focus:ring-caret-link"
                     >
                         <SettingsIcon size={14} strokeWidth={1.75} aria-hidden="true" />
                     </button>
                 </div>
             </header>
-            <main className="min-h-0 flex-1 overflow-auto bg-[var(--caret-surface)] px-8 py-6">
+            <main className="min-h-0 flex-1 overflow-auto bg-caret-surface px-8 py-6">
                 {view === "edit" ? (
                     <Editor key={storeKey} store={store} className="mx-auto max-w-[720px]" />
                 ) : (
-                    <pre className="mx-auto m-0 max-w-[720px] whitespace-pre-wrap break-words font-mono text-[13px] leading-[1.55] text-[var(--caret-text-faint)]">
+                    <pre className="mx-auto m-0 max-w-[720px] whitespace-pre-wrap break-words font-mono text-[13px] leading-[1.55] text-caret-text-faint">
                         {markdown}
                     </pre>
                 )}
@@ -323,12 +315,12 @@ export function App() {
 
 function ViewToggle({ value, onChange }: { value: "edit" | "source"; onChange: (v: "edit" | "source") => void }) {
     const baseClass =
-        "flex h-6 items-center gap-1.5 px-2 text-[11px] font-medium leading-none transition-colors focus:outline-none focus:ring-1 focus:ring-[var(--caret-link)]";
-    const activeClass = "bg-[var(--caret-border)] text-[var(--caret-text)]";
-    const inactiveClass = "text-[var(--caret-text-faint)] hover:text-[var(--caret-text)]";
+        "flex h-6 items-center gap-1.5 px-2 text-[11px] font-medium leading-none transition-colors focus:outline-none focus:ring-1 focus:ring-caret-link";
+    const activeClass = "bg-caret-border text-caret-text";
+    const inactiveClass = "text-caret-text-faint hover:text-caret-text";
     return (
         <div
-            className="flex overflow-hidden rounded-md border border-[var(--caret-border)]"
+            className="flex overflow-hidden rounded-md border border-caret-border"
             role="tablist"
             aria-label="View mode"
         >
@@ -347,7 +339,7 @@ function ViewToggle({ value, onChange }: { value: "edit" | "source"; onChange: (
                 role="tab"
                 aria-selected={value === "source"}
                 onClick={() => onChange("source")}
-                className={`${baseClass} border-l border-[var(--caret-border)] ${value === "source" ? activeClass : inactiveClass}`}
+                className={`${baseClass} border-l border-caret-border ${value === "source" ? activeClass : inactiveClass}`}
             >
                 <Code size={12} strokeWidth={1.75} aria-hidden="true" />
                 Source
@@ -390,25 +382,25 @@ function UnsavedChangesDialog({
                 if (e.target === e.currentTarget) onAction("cancel");
             }}
         >
-            <div className="w-[360px] rounded-lg border border-[var(--caret-border)] bg-[var(--caret-surface)] p-5 text-[var(--caret-text)] shadow-2xl">
+            <div className="w-[360px] rounded-lg border border-caret-border bg-caret-surface p-5 text-caret-text shadow-2xl">
                 <div id="unsaved-dialog-title" className="mb-1 text-sm font-semibold">
                     Save changes to {filename}?
                 </div>
-                <p className="mb-5 text-xs leading-relaxed text-[var(--caret-text-muted)]">
+                <p className="mb-5 text-xs leading-relaxed text-caret-text-muted">
                     Your changes will be lost if you don't save them.
                 </p>
                 <div className="flex items-center justify-end gap-2">
                     <button
                         type="button"
                         onClick={() => onAction("discard")}
-                        className="rounded-md px-3 py-1.5 text-xs text-[var(--caret-text-faint)] transition-colors hover:bg-[var(--caret-border)] hover:text-[var(--caret-text)] focus:outline-none focus:ring-1 focus:ring-[var(--caret-link)]"
+                        className="rounded-md px-3 py-1.5 text-xs text-caret-text-faint transition-colors hover:bg-caret-border hover:text-caret-text focus:outline-none focus:ring-1 focus:ring-caret-link"
                     >
                         Don't save
                     </button>
                     <button
                         type="button"
                         onClick={() => onAction("cancel")}
-                        className="rounded-md border border-[var(--caret-border)] bg-[var(--caret-surface-soft)] px-3 py-1.5 text-xs text-[var(--caret-text)] transition-colors hover:bg-[var(--caret-border)] focus:outline-none focus:ring-1 focus:ring-[var(--caret-link)]"
+                        className="rounded-md border border-caret-border bg-caret-surface-soft px-3 py-1.5 text-xs text-caret-text transition-colors hover:bg-caret-border focus:outline-none focus:ring-1 focus:ring-caret-link"
                     >
                         Cancel
                     </button>
@@ -416,7 +408,7 @@ function UnsavedChangesDialog({
                         ref={saveBtnRef}
                         type="button"
                         onClick={() => onAction("save")}
-                        className="rounded-md bg-[var(--caret-link)] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[var(--caret-link)] focus:ring-offset-1"
+                        className="rounded-md bg-caret-link px-3 py-1.5 text-xs font-medium text-white transition-colors hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-caret-link focus:ring-offset-1"
                     >
                         Save
                     </button>

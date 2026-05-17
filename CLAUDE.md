@@ -6,6 +6,7 @@ RULES:
 
 - While caret and mdedit will be developed in parallel, mdedit should be treated as a standalone library that should be shippable independently of caret.
 - Prefer to make styling changes to caret rather than mdedit. mdedit intentionally provides very minimal styling defaults.
+- Unless otherwise specified, assume the dev server is already running. Do not spin up another one.
 
 # mdedit
 
