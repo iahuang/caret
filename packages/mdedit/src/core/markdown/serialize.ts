@@ -117,6 +117,20 @@ export function createInlineSerializer(
     };
 }
 
+function stripTrailingEmptyParagraph(doc: Block[]): Block[] {
+    if (doc.length === 0) return doc;
+    const last = doc[doc.length - 1]!;
+    if (
+        last.type === "paragraph" &&
+        last.content === "" &&
+        last.marks.length === 0 &&
+        (last.inlineNodes === undefined || last.inlineNodes.length === 0)
+    ) {
+        return doc.slice(0, -1);
+    }
+    return doc;
+}
+
 // Bullet and task items belong to the same "unordered list" family for
 // serialization tightness — a run of mixed `- foo` and `- [ ] bar` should
 // emit one tight list rather than blank-line-separated chunks.
@@ -133,17 +147,24 @@ export function serializeDoc(doc: Block[], schema: Schema = defaultSchema): stri
     const parts: string[] = [];
     let lastIdx = -1;
 
-    for (let i = 0; i < doc.length; i++) {
-        const block = doc[i]!;
+    // Drop a single trailing empty paragraph. The editor auto-appends one
+    // after atomic / source-mode last blocks so the caret can exit them;
+    // it's a UI affordance, not user content, so saves shouldn't gain a
+    // spurious blank line. Only the very last block is considered — empty
+    // paragraphs that appear earlier are real user-authored gaps.
+    const effective = stripTrailingEmptyParagraph(doc);
+
+    for (let i = 0; i < effective.length; i++) {
+        const block = effective[i]!;
         const spec = specByType.get(block.type);
         if (!spec) continue;
-        const text = spec.serialize(block, serInline, { doc, index: i });
+        const text = spec.serialize(block, serInline, { doc: effective, index: i });
         // A block can opt out by returning "" — used by table-cell blocks where
         // only the first cell emits the full pipe-table markdown.
         if (text === "") continue;
 
         if (lastIdx >= 0) {
-            const prev = doc[lastIdx]!;
+            const prev = effective[lastIdx]!;
             const prevSpec = specByType.get(prev.type);
             const tight = spec.tight && prevSpec?.tight && sameTightFamily(prev.type, block.type);
             parts.push(tight ? "\n" : "\n\n");

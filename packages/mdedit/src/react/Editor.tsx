@@ -100,6 +100,19 @@ export interface EditorProps {
     renderPopover?: PopoverRenderer;
 }
 
+/**
+ * Block types whose last instance in the doc needs a trailing empty paragraph
+ * so the caret can leave them. Atomic blocks (math-block, hr) have no
+ * editable text; table cells can only navigate to siblings within the table;
+ * code-blocks have content but no natural "press Enter to exit" affordance.
+ */
+const TRAILING_PARA_NEEDED = new Set([
+    "math-block",
+    "hr",
+    "table-cell",
+    "code-block",
+]);
+
 export type PopoverTarget =
     | { kind: "inline"; id: string; atom: InlineNode; blockId: string }
     | { kind: "block"; id: string; block: Block }
@@ -324,8 +337,27 @@ export function Editor({
                 }),
                 { history: false },
             );
+            return;
         }
-    }, [state.doc.length, store]);
+        // If the last block is one the caret can't naturally type "below"
+        // (atomic blocks, table cells, source-mode blocks), append an empty
+        // paragraph so there's always somewhere to land. The serializer
+        // strips a single trailing empty paragraph so this UI affordance
+        // doesn't leak into saved markdown.
+        const last = state.doc[state.doc.length - 1]!;
+        if (TRAILING_PARA_NEEDED.has(last.type)) {
+            store.setState(
+                (s) => ({
+                    ...s,
+                    doc: [
+                        ...s.doc,
+                        { id: generateId(), type: "paragraph", content: "", marks: [] },
+                    ],
+                }),
+                { history: false },
+            );
+        }
+    }, [state.doc, store]);
 
     useEffect(() => {
         if (!autoFocus) return;
