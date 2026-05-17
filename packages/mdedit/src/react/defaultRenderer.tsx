@@ -194,13 +194,13 @@ function MathBlockDisplay({ latex }: { latex: string }) {
 // reach for a handful, and a 100-item dropdown is worse UX than a curated list.
 // Custom renderers can extend or replace this list.
 export const DEFAULT_CODE_LANGUAGES: ReadonlyArray<{ id: string; label: string }> = [
-    { id: "", label: "plain text" },
-    { id: "bash", label: "bash" },
+    { id: "", label: "Plain text" },
+    { id: "bash", label: "Bash" },
     { id: "c", label: "C" },
     { id: "cpp", label: "C++" },
     { id: "csharp", label: "C#" },
     { id: "css", label: "CSS" },
-    { id: "diff", label: "diff" },
+    { id: "diff", label: "Diff" },
     { id: "go", label: "Go" },
     { id: "html", label: "HTML" },
     { id: "java", label: "Java" },

@@ -284,6 +284,9 @@
     border-color: var(--mdedit-popover-focus);
     box-shadow: 0 4px 16px rgba(74, 140, 255, 0.18);
 }
+.mdedit-node-popover[data-anchor-alignment="center"] {
+    transform: translateX(-50%);
+}
 .mdedit-node-popover-header {
     display: flex;
     align-items: baseline;
@@ -318,6 +321,10 @@
     color: var(--mdedit-text);
     line-height: 1.4;
     width: 100%;
+    /* Cap auto-resize so a multi-page paste doesn't push the popover off
+       screen; the textarea scrolls internally past this point. */
+    max-height: 14em;
+    overflow-y: auto;
 }
 .mdedit-node-popover-input:read-only {
     color: var(--mdedit-text-muted);

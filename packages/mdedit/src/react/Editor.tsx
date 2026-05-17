@@ -621,6 +621,7 @@ export function Editor({
                 onExitLeft={onExitLeft}
                 onExitRight={onExitRight}
                 containerRef={containerRef}
+                anchorAlignment="center"
             />
         );
     }, [popoverTarget, editingId, exitPopover, store]);

@@ -168,6 +168,55 @@ body {
     --mdedit-table-header-bg: var(--caret-table-header-bg);
 }
 
+/*
+ * Popover restyle.
+ *
+ * mdedit's default popover paints a blue focus ring and a tiny uppercase
+ * "MATH" / "LINK" label above the input. Caret's chrome is muted and
+ * label-free elsewhere, so override both: a quiet border with a deeper
+ * shadow when editing (no blue glow), and the label hidden across the
+ * board. The header is hidden too unless it carries the "Open ↗" affordance
+ * the link popover relies on, so non-link popovers don't leave a flex gap
+ * above the input.
+ *
+ * The centered variant — emitted by mdedit when the popover anchors to a
+ * wide centered block like display math — also gets more breathing room so
+ * a typical LaTeX expression fits without clipping.
+ */
+.mdedit-editor .mdedit-node-popover {
+    border-radius: 8px;
+    padding: 8px 10px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+    min-width: 260px;
+}
+.mdedit-editor .mdedit-node-popover.editing {
+    border-color: var(--caret-border);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+[data-theme="dark"] .mdedit-editor .mdedit-node-popover {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+[data-theme="dark"] .mdedit-editor .mdedit-node-popover.editing {
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+}
+.mdedit-editor .mdedit-node-popover-label {
+    display: none;
+}
+/* :has() hides the header for popovers without an Open affordance — i.e.
+   everything except the link popover, where the header still needs to
+   render to host "Open ↗". */
+.mdedit-editor .mdedit-node-popover-header:not(:has(.mdedit-node-popover-open)) {
+    display: none;
+}
+.mdedit-editor .mdedit-node-popover[data-anchor-alignment="center"] {
+    min-width: 380px;
+    max-width: 560px;
+}
+.mdedit-editor .mdedit-node-popover-input {
+    font-size: 13.5px;
+    line-height: 1.5;
+}
+
 /* In dark mode the default highlight.js token colors blow out — re-tint to a
    softer palette. Authors can override these further by re-declaring after
    importing this file. */

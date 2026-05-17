@@ -144,7 +144,7 @@ export const caretCodeBlockRenderer: BlockRenderer = ({ block }) => {
             className="mdedit-code-block group"
         >
             <div
-                className="absolute right-1.5 top-1.5 z-[2]"
+                className="absolute right-1.5 top-1.5 z-2"
                 data-no-content="true"
                 contentEditable={false}
             >
@@ -167,7 +167,6 @@ export const caretCodeBlockRenderer: BlockRenderer = ({ block }) => {
                             onMouseDown={stopMouseDown}
                         >
                             <CopyItem source={block.content} />
-                            <DropdownMenu.Separator className="my-1 mx-0.5 h-px bg-caret-border" />
                             <LanguageMenu current={language} onPick={onPickLanguage} />
                         </DropdownMenu.Content>
                     </DropdownMenu.Portal>

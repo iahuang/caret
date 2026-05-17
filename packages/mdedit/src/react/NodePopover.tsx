@@ -15,7 +15,7 @@
  *     Escape (which just releases focus without moving the main caret).
  */
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 
 export interface NodePopoverProps {
     /** CSS selector resolved within `containerRef` for the anchor element. */
@@ -26,9 +26,15 @@ export interface NodePopoverProps {
     onStartEditing: () => void;
     onChange: (value: string) => void;
     onDoneEditing: () => void;
-    /** Arrow-left at offset 0 inside the textarea — exit to the left side of the atom. */
+    /**
+     * Arrow-left (or arrow-up) at offset 0 inside the textarea — exit to the
+     * left side of the atom / previous block.
+     */
     onExitLeft?: () => void;
-    /** Arrow-right at end of textarea — exit to the right side of the atom. */
+    /**
+     * Arrow-right (or arrow-down) at end of textarea — exit to the right side
+     * of the atom / next block.
+     */
     onExitRight?: () => void;
     containerRef: RefObject<HTMLElement | null>;
     placeholder?: string;
@@ -39,6 +45,15 @@ export interface NodePopoverProps {
      * navigate. Pass the same `value` that's being edited.
      */
     openHref?: string;
+    /**
+     * Where to anchor the popover horizontally relative to the anchor element.
+     * "start" (default) aligns the popover's left edge with the anchor's left.
+     * "center" aligns the popover's horizontal center with the anchor's
+     * horizontal center — useful when the anchor is a wide, centered block
+     * (e.g. a display-math block) and "start" would visually orphan the
+     * popover to one side.
+     */
+    anchorAlignment?: "start" | "center";
 }
 
 export function NodePopover({
@@ -54,6 +69,7 @@ export function NodePopover({
     containerRef,
     placeholder = "LaTeX…",
     openHref,
+    anchorAlignment = "start",
 }: NodePopoverProps) {
     const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -76,8 +92,12 @@ export function NodePopover({
             if (!anchorEl || !container) return;
             const r = anchorEl.getBoundingClientRect();
             const c = container.getBoundingClientRect();
+            const x =
+                anchorAlignment === "center"
+                    ? r.left + r.width / 2 - c.left + container.scrollLeft
+                    : r.left - c.left + container.scrollLeft;
             setPos({
-                x: r.left - c.left + container.scrollLeft,
+                x,
                 y: r.bottom - c.top + container.scrollTop + 6,
             });
         }
@@ -89,7 +109,7 @@ export function NodePopover({
             ro.disconnect();
             window.removeEventListener("resize", update);
         };
-    }, [anchorSelector, value, containerRef]);
+    }, [anchorSelector, value, containerRef, anchorAlignment]);
 
     useEffect(() => {
         if (!editing) {
@@ -104,11 +124,25 @@ export function NodePopover({
         focusedForEditingRef.current = true;
     }, [editing, pos]);
 
+    // Auto-size the textarea to fit its content. `rows={1}` is the floor; we
+    // reset to "auto" before reading scrollHeight so the box can shrink as
+    // well as grow. `useLayoutEffect` runs synchronously before paint, so
+    // there's no one-frame flash at the rows={1} default. CSS provides the
+    // max-height + overflow-y so very long input scrolls instead of pushing
+    // the popover off-screen.
+    useLayoutEffect(() => {
+        const ta = textareaRef.current;
+        if (!ta) return;
+        ta.style.height = "auto";
+        ta.style.height = `${ta.scrollHeight}px`;
+    }, [value, pos]);
+
     if (!pos) return null;
 
     return (
         <div
             className={`mdedit-node-popover${editing ? " editing" : ""}`}
+            data-anchor-alignment={anchorAlignment}
             style={{ position: "absolute", left: pos.x, top: pos.y }}
             onMouseDown={(e) => e.stopPropagation()}
         >
@@ -142,13 +176,27 @@ export function NodePopover({
                     // edge of the textarea. If the textarea is in a select-all
                     // state (initial entry), the first arrow press just
                     // collapses the selection; a second one at the edge exits.
+                    // ArrowUp / ArrowDown mirror Left/Right: they only exit
+                    // when the caret is at offset 0 / value.length, so
+                    // multi-line content (hard newlines or soft-wraps) is
+                    // still navigable inside the textarea — the browser's
+                    // default vertical caret move runs first and ArrowUp only
+                    // escapes once it would otherwise no-op at the top.
                     if (ta.selectionStart !== ta.selectionEnd) return;
-                    if (e.key === "ArrowLeft" && ta.selectionStart === 0 && onExitLeft) {
+                    if (
+                        (e.key === "ArrowLeft" || e.key === "ArrowUp") &&
+                        ta.selectionStart === 0 &&
+                        onExitLeft
+                    ) {
                         e.preventDefault();
                         onExitLeft();
                         return;
                     }
-                    if (e.key === "ArrowRight" && ta.selectionStart === value.length && onExitRight) {
+                    if (
+                        (e.key === "ArrowRight" || e.key === "ArrowDown") &&
+                        ta.selectionStart === value.length &&
+                        onExitRight
+                    ) {
                         e.preventDefault();
                         onExitRight();
                         return;
@@ -158,7 +206,7 @@ export function NodePopover({
                     if (!editing) onStartEditing();
                 }}
                 readOnly={!editing}
-                rows={Math.max(1, Math.min(6, value.split("\n").length))}
+                rows={1}
                 spellCheck={false}
                 placeholder={placeholder}
             />
