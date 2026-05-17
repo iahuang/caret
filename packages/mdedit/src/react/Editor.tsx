@@ -105,8 +105,31 @@ export function Editor({
     const state = useSyncExternalStore(subscribe, store.getState, store.getState);
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
-    const [isFocused, setIsFocused] = useState(false);
+    const [inputHasFocus, setInputHasFocus] = useState(false);
+    const [windowHasFocus, setWindowHasFocus] = useState(() =>
+        typeof document === "undefined" ? true : document.hasFocus(),
+    );
+    // The editor is "focused" only when our hidden textarea owns DOM focus AND
+    // the window itself is focused. Window-level blur doesn't fire `blur` on
+    // the textarea in WebKit/Tauri, so we'd otherwise keep drawing the caret
+    // while the user is in another app or window.
+    const isFocused = inputHasFocus && windowHasFocus;
     const [editingId, setEditingId] = useState<string | null>(null);
+
+    useEffect(() => {
+        function onWindowFocus() {
+            setWindowHasFocus(true);
+        }
+        function onWindowBlur() {
+            setWindowHasFocus(false);
+        }
+        window.addEventListener("focus", onWindowFocus);
+        window.addEventListener("blur", onWindowBlur);
+        return () => {
+            window.removeEventListener("focus", onWindowFocus);
+            window.removeEventListener("blur", onWindowBlur);
+        };
+    }, []);
 
     const mapping = useDomMapping({ containerRef, doc: state.doc });
 
@@ -643,8 +666,8 @@ export function Editor({
                 onPaste={onPaste}
                 onCopy={onCopy}
                 onCut={onCut}
-                onFocus={() => setIsFocused(true)}
-                onBlur={() => setIsFocused(false)}
+                onFocus={() => setInputHasFocus(true)}
+                onBlur={() => setInputHasFocus(false)}
             />
             <EditorActionsContext.Provider value={editorActions}>
                 <div className="mdedit-content">{renderedBlocks}</div>

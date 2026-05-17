@@ -6,7 +6,7 @@ import { Editor, defaultRenderers } from "mdedit/react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { getCurrentWindow, LogicalPosition } from "@tauri-apps/api/window";
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { WebviewWindow, getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { SettingsPopover, type Settings, defaultSettings, loadSettings, saveSettings } from "./Settings";
 import { caretCodeBlockRenderer } from "./CodeBlockRenderer";
 import { caretTableCellRenderer } from "./TableRenderer";
@@ -255,24 +255,18 @@ export function App() {
     };
 
     useEffect(() => {
-        function onKey(e: KeyboardEvent) {
-            const mod = e.metaKey || e.ctrlKey;
-            if (!mod) return;
-            const key = e.key.toLowerCase();
-            if (key === "o" && !e.shiftKey && !e.altKey) {
-                e.preventDefault();
-                void actionsRef.current.openFile();
-            } else if (key === "n" && !e.shiftKey && !e.altKey) {
-                e.preventDefault();
-                void actionsRef.current.newFile();
-            } else if (key === "s" && !e.altKey) {
-                e.preventDefault();
-                if (e.shiftKey) void actionsRef.current.saveAsFile();
-                else void actionsRef.current.saveFile();
-            }
-        }
-        window.addEventListener("keydown", onKey);
-        return () => window.removeEventListener("keydown", onKey);
+        // Scope to this webview — `listen()` from @tauri-apps/api/event defaults
+        // to target `Any`, which receives events emitted to any label.
+        const win = getCurrentWebviewWindow();
+        const unlisteners = Promise.all([
+            win.listen("menu:new_window", () => void actionsRef.current.newFile()),
+            win.listen("menu:open_file", () => void actionsRef.current.openFile()),
+            win.listen("menu:save_file", () => void actionsRef.current.saveFile()),
+            win.listen("menu:save_as_file", () => void actionsRef.current.saveAsFile()),
+        ]);
+        return () => {
+            void unlisteners.then((fns) => fns.forEach((fn) => fn()));
+        };
     }, []);
 
     useEffect(() => {
@@ -325,7 +319,7 @@ export function App() {
                     </button>
                 </div>
             </header>
-            <main className="min-h-0 flex-1 overflow-auto bg-caret-surface px-8 py-10">
+            <main className="min-h-0 flex-1 overflow-auto bg-caret-surface px-10 py-10">
                 {view === "rich" ? (
                     <Editor
                         key={storeKey}
