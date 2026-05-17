@@ -174,15 +174,23 @@ function moveVertical(ctx: KeyContext, dir: "up" | "down", extend: boolean) {
         const next = ctx.mapping.positionFromPoint(x, y);
         if (!next) continue;
         if (next.blockId === cur.blockId && next.offset === cur.offset) continue;
-        // Reject probes that snap back to the same visual line — happens when
-        // the y target lands in the block's padding (common in table cells)
-        // and `caretPositionFromPoint` returns the nearest text position on
-        // the current line instead of nothing. Without this, ArrowDown in a
-        // padded cell would just walk the caret to the cell's text end before
-        // crossing into the row below.
-        if (next.blockId === cur.blockId) {
-            const nextRect = ctx.mapping.clientRectForPosition(next);
-            if (nextRect && Math.abs(nextRect.top - r.top) < lineHeight * 0.5) continue;
+        // Reject probes that snap to a position in the wrong vertical
+        // direction (or back onto the current visual line). Two failure
+        // modes share this fix:
+        //  - The y target lands in a block's padding (common in table cells)
+        //    and `caretPositionFromPoint` returns the nearest text position
+        //    on the current line. Without this, ArrowDown in a padded cell
+        //    would walk the caret to the cell's text end before crossing
+        //    into the row below.
+        //  - The y target lands in the inter-block margin around an atomic
+        //    block (HR, math) whose `data-block-content` is 0-height. WebKit
+        //    snaps to the closest text caret, which can be in the OPPOSITE
+        //    direction (e.g. the top of the document). Without this, ArrowDown
+        //    from a paragraph just above an HR teleports to the doc start.
+        const nextRect = ctx.mapping.clientRectForPosition(next);
+        if (nextRect) {
+            if (dir === "down" && nextRect.top < r.top + lineHeight * 0.5) continue;
+            if (dir === "up" && nextRect.bottom > r.bottom - lineHeight * 0.5) continue;
         }
         applyMovement(ctx.store, next, extend);
         return;
