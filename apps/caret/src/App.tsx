@@ -5,7 +5,8 @@ import type { Store } from "mdedit/core";
 import { Editor, defaultRenderers } from "mdedit/react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow, LogicalPosition } from "@tauri-apps/api/window";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { SettingsPopover, type Settings, defaultSettings, loadSettings, saveSettings } from "./Settings";
 import { caretCodeBlockRenderer } from "./CodeBlockRenderer";
 
@@ -26,7 +27,7 @@ A native markdown editor built on [mdedit](./).
 - **Cmd/Ctrl-Alt-1..6** headings, **-Alt-0** paragraph
 - **Cmd/Ctrl-Shift-8** bullet list, **-Shift-7** ordered list
 - **Cmd/Ctrl-Z** undo, **-Shift-Z** redo
-- **Cmd/Ctrl-N** new file, **-O** open, **-S** save, **-Shift-S** save as
+- **Cmd/Ctrl-N** new window, **-O** open, **-S** save, **-Shift-S** save as
 
 ## Math
 
@@ -84,8 +85,26 @@ function basename(path: string): string {
 
 type DiscardAction = "save" | "discard" | "cancel";
 
+// Only the main window seeds the welcome doc; windows spawned via Cmd+N start blank.
+const IS_MAIN_WINDOW = getCurrentWindow().label === "main";
+
+function openNewWindow(): void {
+    const label = `editor-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    new WebviewWindow(label, {
+        url: "index.html",
+        title: "Caret",
+        width: 1100,
+        height: 720,
+        minWidth: 600,
+        minHeight: 400,
+        titleBarStyle: "overlay",
+        hiddenTitle: true,
+        trafficLightPosition: new LogicalPosition(16, 18),
+    });
+}
+
 export function App() {
-    const [store, setStore] = useState<Store>(() => makeStore(INITIAL));
+    const [store, setStore] = useState<Store>(() => makeStore(IS_MAIN_WINDOW ? INITIAL : ""));
     const [storeKey, setStoreKey] = useState(0);
     const [currentPath, setCurrentPath] = useState<string | null>(null);
     const [savedMarkdown, setSavedMarkdown] = useState(() => serializeDoc(store.getState().doc));
@@ -196,15 +215,7 @@ export function App() {
     };
 
     actionsRef.current.newFile = async () => {
-        if (isDirty) {
-            const action = await confirmDiscard();
-            if (action === "cancel") return;
-            if (action === "save") {
-                const ok = await actionsRef.current.saveFile();
-                if (!ok) return;
-            }
-        }
-        loadDoc("", null);
+        openNewWindow();
     };
 
     actionsRef.current.openFile = async () => {

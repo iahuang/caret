@@ -4,6 +4,20 @@
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Caret</title>
+        <style>
+            /* Mirrors --caret-bg in app.css so the window paints the correct
+               color before the CSS bundle and React hydrate. */
+            html, body { background: #fafaf8; margin: 0; }
+            html[data-theme="dark"], html[data-theme="dark"] body { background: #141414; }
+        </style>
+        <script>
+            try {
+                var raw = localStorage.getItem("caret.settings.v1");
+                if (raw && JSON.parse(raw).theme === "dark") {
+                    document.documentElement.setAttribute("data-theme", "dark");
+                }
+            } catch (e) {}
+        </script>
     </head>
     <body>
         <div id="root"></div>
