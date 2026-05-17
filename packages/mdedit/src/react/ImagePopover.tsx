@@ -11,7 +11,8 @@
  *   - Escape returns to the read-only preview state.
  */
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
+import { useNodePopoverShell } from "./useNodePopoverShell";
 
 export interface ImagePopoverProps {
     anchorSelector: string;
@@ -38,50 +39,22 @@ export function ImagePopover({
     onExitRight,
     containerRef,
 }: ImagePopoverProps) {
-    const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
     const altRef = useRef<HTMLInputElement>(null);
     const srcRef = useRef<HTMLInputElement>(null);
-    const focusedForEditingRef = useRef(false);
+    const { pos, editingSessionId } = useNodePopoverShell({
+        anchorSelector,
+        editing,
+        containerRef,
+        measureDeps: [alt, src],
+    });
 
     useEffect(() => {
-        const container = containerRef.current;
-        if (!container) return;
-        const anchorEl = container.querySelector(anchorSelector);
-        if (!anchorEl) {
-            setPos(null);
-            return;
-        }
-        function update() {
-            if (!anchorEl || !container) return;
-            const r = anchorEl.getBoundingClientRect();
-            const c = container.getBoundingClientRect();
-            setPos({
-                x: r.left - c.left + container.scrollLeft,
-                y: r.bottom - c.top + container.scrollTop + 6,
-            });
-        }
-        update();
-        const ro = new ResizeObserver(update);
-        ro.observe(container);
-        window.addEventListener("resize", update);
-        return () => {
-            ro.disconnect();
-            window.removeEventListener("resize", update);
-        };
-    }, [anchorSelector, alt, src, containerRef]);
-
-    useEffect(() => {
-        if (!editing) {
-            focusedForEditingRef.current = false;
-            return;
-        }
-        if (focusedForEditingRef.current) return;
+        if (editingSessionId < 0) return;
         const target = srcRef.current;
         if (!target) return;
         target.focus();
         target.select();
-        focusedForEditingRef.current = true;
-    }, [editing, pos]);
+    }, [editingSessionId]);
 
     if (!pos) return null;
 

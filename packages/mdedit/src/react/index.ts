@@ -1,4 +1,10 @@
-export { Editor, type EditorProps } from "./Editor";
+export {
+    Editor,
+    type EditorProps,
+    type PopoverTarget,
+    type PopoverRenderContext,
+    type PopoverRenderer,
+} from "./Editor";
 export {
     defaultRenderers,
     paragraphRenderer,
@@ -33,3 +39,8 @@ export { Caret } from "./Caret";
 export { SelectionLayer } from "./SelectionLayer";
 export { BlockView, RenderedBlocks, type RenderedBlocksProps } from "./BlockView";
 export { NodePopover, type NodePopoverProps } from "./NodePopover";
+export {
+    useNodePopoverShell,
+    type NodePopoverShell,
+    type NodePopoverShellOptions,
+} from "./useNodePopoverShell";

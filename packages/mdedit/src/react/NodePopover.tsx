@@ -13,9 +13,13 @@
  *     editor. Exited by arrow-left at offset 0 / arrow-right at end (which
  *     also moves the main caret to the appropriate side of the atom) or by
  *     Escape (which just releases focus without moving the main caret).
+ *
+ * Positioning + edit-session tracking live in `useNodePopoverShell`; this
+ * file owns only the textarea surface and the textarea-specific keymap.
  */
 
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
+import { useNodePopoverShell } from "./useNodePopoverShell";
 
 export interface NodePopoverProps {
     /** CSS selector resolved within `containerRef` for the anchor element. */
@@ -71,58 +75,22 @@ export function NodePopover({
     openHref,
     anchorAlignment = "start",
 }: NodePopoverProps) {
-    const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-    // Tracks whether we've already grabbed focus for the current edit session.
-    // The popover returns null on the first render while `pos` is still being
-    // measured, so we have to defer focus until the textarea actually exists —
-    // and once focused, we must NOT re-select on every `pos` recompute (which
-    // would clobber the user's caret while they type).
-    const focusedForEditingRef = useRef(false);
+    const { pos, editingSessionId } = useNodePopoverShell({
+        anchorSelector,
+        editing,
+        containerRef,
+        anchorAlignment,
+        measureDeps: [value],
+    });
 
     useEffect(() => {
-        const container = containerRef.current;
-        if (!container) return;
-        const anchorEl = container.querySelector(anchorSelector);
-        if (!anchorEl) {
-            setPos(null);
-            return;
-        }
-        function update() {
-            if (!anchorEl || !container) return;
-            const r = anchorEl.getBoundingClientRect();
-            const c = container.getBoundingClientRect();
-            const x =
-                anchorAlignment === "center"
-                    ? r.left + r.width / 2 - c.left + container.scrollLeft
-                    : r.left - c.left + container.scrollLeft;
-            setPos({
-                x,
-                y: r.bottom - c.top + container.scrollTop + 6,
-            });
-        }
-        update();
-        const ro = new ResizeObserver(update);
-        ro.observe(container);
-        window.addEventListener("resize", update);
-        return () => {
-            ro.disconnect();
-            window.removeEventListener("resize", update);
-        };
-    }, [anchorSelector, value, containerRef, anchorAlignment]);
-
-    useEffect(() => {
-        if (!editing) {
-            focusedForEditingRef.current = false;
-            return;
-        }
-        if (focusedForEditingRef.current) return;
+        if (editingSessionId < 0) return;
         const ta = textareaRef.current;
         if (!ta) return;
         ta.focus();
         ta.select();
-        focusedForEditingRef.current = true;
-    }, [editing, pos]);
+    }, [editingSessionId]);
 
     // Auto-size the textarea to fit its content. `rows={1}` is the floor; we
     // reset to "auto" before reading scrollHeight so the box can shrink as

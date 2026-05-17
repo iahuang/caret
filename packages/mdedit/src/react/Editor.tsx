@@ -36,6 +36,8 @@ import {
     type FormEvent,
     type KeyboardEvent as ReactKeyboardEvent,
     type MouseEvent as ReactMouseEvent,
+    type ReactNode,
+    type RefObject,
 } from "react";
 import {
     activeMarks,
@@ -83,12 +85,60 @@ export interface EditorProps {
     autoFocus?: boolean;
     className?: string;
     "aria-label"?: string;
+    /**
+     * Optional host override for the editing popover. Called whenever a
+     * popover would otherwise be rendered. Return:
+     *   - a ReactNode to use instead of the default popover for this target.
+     *   - `null` to suppress the popover entirely for this target.
+     *   - `undefined` to fall through to the default popover.
+     *
+     * The host is responsible for: (a) anchoring/positioning (use
+     * `useNodePopoverShell` for the standard contract), (b) routing user
+     * intent to `onExitLeft`/`onExitRight`/`onDoneEditing`, and (c) calling
+     * `onStartEditing` when the host wants to switch out of preview state.
+     */
+    renderPopover?: PopoverRenderer;
 }
 
-type PopoverTarget =
+export type PopoverTarget =
     | { kind: "inline"; id: string; atom: InlineNode; blockId: string }
     | { kind: "block"; id: string; block: Block }
     | { kind: "link"; id: string; mark: Mark; blockId: string };
+
+interface PopoverRenderBase {
+    editing: boolean;
+    containerRef: RefObject<HTMLElement | null>;
+    onStartEditing: () => void;
+    onDoneEditing: () => void;
+    onExitLeft: () => void;
+    onExitRight: () => void;
+}
+
+export type PopoverRenderContext = PopoverRenderBase &
+    (
+        | {
+              kind: "inline";
+              atom: InlineNode;
+              blockId: string;
+              /** Patches the inline atom's `data` object. */
+              onChange: (patch: Partial<Record<string, unknown>>) => void;
+          }
+        | {
+              kind: "block";
+              block: Block;
+              /** Patches the block's `metadata` object. */
+              onChange: (patch: Record<string, unknown>) => void;
+          }
+        | {
+              kind: "link";
+              mark: Mark;
+              blockId: string;
+              /** Replaces the link mark's `href`. */
+              onChange: (patch: { href: string }) => void;
+          }
+    );
+
+export type PopoverRenderer = (ctx: PopoverRenderContext) => ReactNode | undefined;
 
 export function Editor({
     store,
@@ -100,6 +150,7 @@ export function Editor({
     autoFocus = true,
     className,
     "aria-label": ariaLabel = "Editor",
+    renderPopover,
 }: EditorProps) {
     const subscribe = useCallback((fn: () => void) => store.subscribe(fn), [store]);
     const state = useSyncExternalStore(subscribe, store.getState, store.getState);
@@ -568,6 +619,51 @@ export function Editor({
         const editing = editingId === popoverTarget.id;
         const onStartEditing = () => setEditingId(popoverTarget.id);
 
+        if (renderPopover) {
+            const base = {
+                editing,
+                containerRef,
+                onStartEditing,
+                onDoneEditing,
+                onExitLeft,
+                onExitRight,
+            };
+            let ctx: PopoverRenderContext;
+            if (popoverTarget.kind === "inline") {
+                const atom = popoverTarget.atom;
+                ctx = {
+                    ...base,
+                    kind: "inline",
+                    atom,
+                    blockId: popoverTarget.blockId,
+                    onChange: (patch) =>
+                        store.setState((s) => updateInlineNode(s, atom.id, patch)),
+                };
+            } else if (popoverTarget.kind === "block") {
+                const block = popoverTarget.block;
+                ctx = {
+                    ...base,
+                    kind: "block",
+                    block,
+                    onChange: (patch) =>
+                        store.setState((s) => updateBlockMetadata(s, block.id, patch)),
+                };
+            } else {
+                const linkId = popoverTarget.id;
+                ctx = {
+                    ...base,
+                    kind: "link",
+                    mark: popoverTarget.mark,
+                    blockId: popoverTarget.blockId,
+                    onChange: (patch) =>
+                        store.setState((s) => updateLinkHref(s, linkId, patch.href)),
+                };
+            }
+            const hostNode = renderPopover(ctx);
+            if (hostNode !== undefined) return hostNode;
+            // Fall through to defaults.
+        }
+
         if (popoverTarget.kind === "inline" && popoverTarget.atom.type === "image") {
             const atom = popoverTarget.atom;
             return (
@@ -647,7 +743,7 @@ export function Editor({
                 anchorAlignment="center"
             />
         );
-    }, [popoverTarget, editingId, exitPopover, store]);
+    }, [popoverTarget, editingId, exitPopover, store, renderPopover]);
 
     return (
         <div
