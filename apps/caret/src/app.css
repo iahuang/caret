@@ -142,6 +142,23 @@ body {
     text-align: right;
 }
 
+/* Give table columns a roomier minimum width than the browser's content-fit
+   default — empty or single-word cells otherwise collapse to ~2ch and make
+   the edge meatballs sit right on top of each other.
+   Also: move padding from the content div to the cell. Caret.tsx measures
+   the empty-block caret with `getBoundingClientRect` on the data-block-content
+   element, so any padding on that element pushes the caret to the outer edge
+   rather than where text would actually start. Padding on the cell keeps the
+   visual layout identical while letting the content div's rect line up with
+   the text-start position. */
+.mdedit-editor .mdedit-table-cell {
+    padding: 6px 10px;
+}
+.mdedit-editor .mdedit-table-cell-content {
+    padding: 0;
+    min-width: 2em;
+}
+
 /* mdedit reads these on the editor element; bridge them from the caret vars.
    --caret-font-family is the editor-only font choice (sans vs serif). */
 .mdedit-editor {

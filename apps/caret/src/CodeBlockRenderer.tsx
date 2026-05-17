@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Check, ChevronRight, Copy, Ellipsis, Languages } from "lucide-react";
+import { Check, ChevronRight, Copy, Languages } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import hljs from "highlight.js";
 import {
@@ -7,6 +7,13 @@ import {
     useEditorActions,
     type BlockRenderer,
 } from "mdedit/react";
+import {
+    MeatballMenu,
+    meatballMenuContentClass,
+    meatballMenuIconClass,
+    meatballMenuItemClass,
+    stopMouseDown,
+} from "./MeatballMenu";
 
 function highlightToHtml(source: string, language: string): string {
     if (source.length === 0) return "";
@@ -23,19 +30,6 @@ function highlightToHtml(source: string, language: string): string {
         .replace(/>/g, "&gt;");
 }
 
-// The editor swallows mousedown anywhere inside [data-no-content], so the
-// trigger button is safe from selection-drag. Radix portals the menu surface
-// to document.body — clicks land outside the editor container entirely.
-function stopMouseDown(e: { stopPropagation: () => void }) {
-    e.stopPropagation();
-}
-
-const menuItemClass =
-    "flex items-center gap-1.5 rounded px-2 py-1 text-xs text-caret-text cursor-pointer select-none outline-none data-[highlighted]:bg-caret-border data-[disabled]:cursor-default data-[disabled]:text-caret-text-faint";
-
-const menuIconClass =
-    "inline-flex w-3.5 items-center justify-center text-caret-text-faint";
-
 function LanguageMenu({
     current,
     onPick,
@@ -46,8 +40,8 @@ function LanguageMenu({
     const known = DEFAULT_CODE_LANGUAGES.some((l) => l.id === current);
     return (
         <DropdownMenu.Sub>
-            <DropdownMenu.SubTrigger className={menuItemClass}>
-                <span className={menuIconClass}>
+            <DropdownMenu.SubTrigger className={meatballMenuItemClass}>
+                <span className={meatballMenuIconClass}>
                     <Languages size={12} strokeWidth={1.75} aria-hidden="true" />
                 </span>
                 <span>Language</span>
@@ -62,13 +56,13 @@ function LanguageMenu({
             </DropdownMenu.SubTrigger>
             <DropdownMenu.Portal>
                 <DropdownMenu.SubContent
-                    className="z-[70] max-h-80 min-w-[160px] overflow-y-auto rounded-md border border-caret-border bg-caret-surface p-1 font-sans text-xs text-caret-text shadow-[0_8px_24px_rgba(0,0,0,0.18)]"
+                    className={`${meatballMenuContentClass} max-h-80 overflow-y-auto`}
                     sideOffset={4}
                     onMouseDown={stopMouseDown}
                 >
                     <DropdownMenu.RadioGroup value={current} onValueChange={onPick}>
                         {!known && current ? (
-                            <DropdownMenu.RadioItem value={current} className={menuItemClass}>
+                            <DropdownMenu.RadioItem value={current} className={meatballMenuItemClass}>
                                 <span className="inline-flex w-3.5 items-center justify-center text-caret-text">
                                     <Check size={12} strokeWidth={2.25} aria-hidden="true" />
                                 </span>
@@ -79,7 +73,7 @@ function LanguageMenu({
                             <DropdownMenu.RadioItem
                                 key={l.id || "__plain"}
                                 value={l.id}
-                                className={menuItemClass}
+                                className={meatballMenuItemClass}
                             >
                                 <span className="inline-flex w-3.5 items-center justify-center text-caret-text">
                                     <DropdownMenu.ItemIndicator>
@@ -109,13 +103,13 @@ function CopyItem({ source }: { source: string }): ReactNode {
     };
     return (
         <DropdownMenu.Item
-            className={menuItemClass}
+            className={meatballMenuItemClass}
             onSelect={(e) => {
                 e.preventDefault();
                 onCopy();
             }}
         >
-            <span className={menuIconClass}>
+            <span className={meatballMenuIconClass}>
                 {copied ? (
                     <Check size={12} strokeWidth={2.25} aria-hidden="true" />
                 ) : (
@@ -126,6 +120,11 @@ function CopyItem({ source }: { source: string }): ReactNode {
         </DropdownMenu.Item>
     );
 }
+
+// Hover-only visibility: parent `.group` gives the trigger its visibility
+// cue. The shared base class already covers hover/open color states.
+const codeBlockTriggerClassName =
+    "opacity-0 focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100";
 
 export const caretCodeBlockRenderer: BlockRenderer = ({ block }) => {
     const language = ((block.metadata?.language as string | undefined) ?? "").trim();
@@ -148,29 +147,13 @@ export const caretCodeBlockRenderer: BlockRenderer = ({ block }) => {
                 data-no-content="true"
                 contentEditable={false}
             >
-                <DropdownMenu.Root modal={false}>
-                    <DropdownMenu.Trigger asChild>
-                        <button
-                            type="button"
-                            aria-label="Code block options"
-                            onMouseDown={stopMouseDown}
-                            className="inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded border-0 bg-transparent p-0 text-caret-text-faint opacity-0 transition-opacity duration-150 hover:bg-caret-border hover:text-caret-text focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-caret-link group-hover:opacity-100 data-[state=open]:bg-caret-border data-[state=open]:text-caret-text data-[state=open]:opacity-100"
-                        >
-                            <Ellipsis size={14} strokeWidth={1.75} aria-hidden="true" />
-                        </button>
-                    </DropdownMenu.Trigger>
-                    <DropdownMenu.Portal>
-                        <DropdownMenu.Content
-                            className="z-[70] min-w-[160px] rounded-md border border-caret-border bg-caret-surface p-1 font-sans text-xs text-caret-text shadow-[0_8px_24px_rgba(0,0,0,0.18)]"
-                            align="end"
-                            sideOffset={4}
-                            onMouseDown={stopMouseDown}
-                        >
-                            <CopyItem source={block.content} />
-                            <LanguageMenu current={language} onPick={onPickLanguage} />
-                        </DropdownMenu.Content>
-                    </DropdownMenu.Portal>
-                </DropdownMenu.Root>
+                <MeatballMenu
+                    triggerLabel="Code block options"
+                    triggerClassName={codeBlockTriggerClassName}
+                >
+                    <CopyItem source={block.content} />
+                    <LanguageMenu current={language} onPick={onPickLanguage} />
+                </MeatballMenu>
             </div>
             <pre className="mdedit-code-block-pre">
                 {block.content.length === 0 ? (

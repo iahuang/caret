@@ -9,6 +9,7 @@ import { getCurrentWindow, LogicalPosition } from "@tauri-apps/api/window";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { SettingsPopover, type Settings, defaultSettings, loadSettings, saveSettings } from "./Settings";
 import { caretCodeBlockRenderer } from "./CodeBlockRenderer";
+import { caretTableCellRenderer } from "./TableRenderer";
 
 const INITIAL = `# Caret
 
@@ -125,7 +126,11 @@ export function App() {
     const settingsButtonRef = useRef<HTMLButtonElement>(null);
 
     const editorRenderers = useMemo(
-        () => ({ ...defaultRenderers, "code-block": caretCodeBlockRenderer }),
+        () => ({
+            ...defaultRenderers,
+            "code-block": caretCodeBlockRenderer,
+            "table-cell": caretTableCellRenderer,
+        }),
         [],
     );
 
