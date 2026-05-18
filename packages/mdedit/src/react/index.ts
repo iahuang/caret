@@ -1,5 +1,6 @@
 export {
     Editor,
+    type EditorHandle,
     type EditorProps,
     type PopoverTarget,
     type PopoverRenderContext,
@@ -37,6 +38,8 @@ export { useKeymap, type KeyBinding, type KeyContext } from "./useKeymap";
 export { HiddenInput } from "./HiddenInput";
 export { Caret } from "./Caret";
 export { SelectionLayer } from "./SelectionLayer";
+export { MatchHighlightLayer } from "./MatchHighlightLayer";
+export { useFind, type UseFindOptions, type UseFindResult } from "./useFind";
 export { BlockView, RenderedBlocks, type RenderedBlocksProps } from "./BlockView";
 export { NodePopover, type NodePopoverProps } from "./NodePopover";
 export {

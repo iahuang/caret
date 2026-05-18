@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Code, Pencil, Settings as SettingsIcon } from "lucide-react";
-import { createStore, parseMarkdown, serializeDoc } from "mdedit/core";
+import { createStore, parseMarkdown, serializeDoc, type FindOptions } from "mdedit/core";
 import type { Store } from "mdedit/core";
-import { Editor, defaultRenderers, type PopoverRenderer } from "mdedit/react";
+import { Editor, defaultRenderers, useFind, type EditorHandle, type PopoverRenderer } from "mdedit/react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { getCurrentWindow, LogicalPosition } from "@tauri-apps/api/window";
@@ -11,56 +11,86 @@ import { SettingsPopover, type Settings, defaultSettings, loadSettings, saveSett
 import { caretCodeBlockRenderer } from "./CodeBlockRenderer";
 import { caretTableCellRenderer } from "./TableRenderer";
 import { CaretMathPopover } from "./CaretMathPopover";
+import { FindReplaceBar } from "./FindReplaceBar";
 
-const INITIAL = `# Caret
+const INITIAL = `# A small pendulum
 
-A native markdown editor built on [mdedit](./).
+> *I am, you know, somewhat partial to slow things.*
+> — Bachelard, *The Poetics of Space*
 
-## What works
+Last winter I hung a brass nut from the ceiling of my study, on a length of cotton thread fastened to a screw that had been holding up a calendar. It was the simplest experiment I could think of: a thread, a weight at the end, a hand to start it moving, and a clock.
 
-- Paragraphs, headings, *bullet* and ordered lists, blockquotes
-- Inline marks: **bold**, *italic*, \`code\`, ~~strike~~
-- Mouse selection (drag), arrow-key navigation across wraps
-- Markdown shortcuts: type \`# \`, \`## \`, \`- \`, \`1. \`, or \`> \` at the start of a line
+My equipment was modest:
 
-## Keyboard
+- a brass hex nut, perhaps twenty grams
+- about 0.9 m of cotton thread
+- the calendar screw, demoted
+- a kitchen clock with a second hand
 
-- **Cmd/Ctrl-B** bold, **-I** italic, **-E** code, **-Shift-X** strike
-- **Cmd/Ctrl-Alt-1..6** headings, **-Alt-0** paragraph
-- **Cmd/Ctrl-Shift-8** bullet list, **-Shift-7** ordered list
-- **Cmd/Ctrl-Z** undo, **-Shift-Z** redo
-- **Cmd/Ctrl-N** new window, **-O** open, **-S** save, **-Shift-S** save as
+## What I expected
 
-## Math
-
-Inline math like $e^{i\\pi} + 1 = 0$ renders in the paragraph. Type \`$x^2$\` and watch the dollars collapse into an atom. Walk the cursor next to a math atom and a popover appears with the source. Press **Tab** to edit the LaTeX; **Escape** to return to the document.
+For small angles the period of a simple pendulum depends only on its length:
 
 $$
-\\int_0^\\infty e^{-x^2}\\,dx = \\frac{\\sqrt{\\pi}}{2}
+T = 2\\pi\\sqrt{\\frac{L}{g}}
 $$
 
-Block math is an atomic block — click into it to anchor the cursor, then press **Tab** to open the popover.
+A result that grows more astonishing the longer you sit with it. The *mass* of the bob does not appear; nor does the *amplitude*, provided it stays small. The thread's length $L$ and the local gravitational acceleration $g \\approx 9.81~\\text{m/s}^2$ are enough. With $L = 0.9~\\text{m}$ the formula gives $T \\approx 1.9~\\text{s}$.
 
-## Code
+## What I measured
+
+I let the pendulum swing through twenty full periods and divided the total time by twenty. I did this five times.
+
+| Trial | Total time (s) | Period (s) | Deviation |
+| :---: | -------------: | ---------: | --------: |
+|   1   |          37.92 |      1.896 |    −0.4 % |
+|   2   |          38.10 |      1.905 |    +0.0 % |
+|   3   |          38.04 |      1.902 |    −0.2 % |
+|   4   |          38.16 |      1.908 |    +0.2 % |
+|   5   |          38.07 |      1.904 |    −0.1 % |
+
+The agreement, for a kitchen clock and a hex nut, was better than I deserved.
+
+## A numerical check
+
+When the small-angle approximation $\\sin\\theta \\approx \\theta$ **stops holding**, the period grows with amplitude. The exact period is a complete elliptic integral; I find it easier to integrate the equation of motion directly, with a step \`dt = 1e-4\`:
 
 \`\`\`typescript
-function greet(name: string): string {
-    return \`Hello, \${name}!\`;
+function periodOf(theta0: number, L = 1, g = 9.81): number {
+    const dt = 1e-4;
+    let theta = theta0;
+    let omega = 0;
+    let t = 0;
+    while (true) {
+        const prev = theta;
+        omega += -(g / L) * Math.sin(theta) * dt;
+        theta += omega * dt;
+        t += dt;
+        if (theta < 0 && prev >= 0) return 4 * t;
+    }
 }
 \`\`\`
 
-## Tables
+At $\\theta_0 = 5°$ the function returns the small-angle answer to four places. At $60°$ the period comes out roughly seven percent longer — small enough to miss with a kitchen clock, large enough to matter to a clockmaker.
 
-| Feature        | Status   | Notes                  |
-| :------------- | :------: | ---------------------: |
-| Paragraphs     | done     | the default fallback   |
-| Lists          | done     | flat with \`indent\`     |
-| Inline math    | done     | popover-edited atoms   |
-| Tables         | done     | cells-as-blocks        |
+---
 
-## Try it
+## Notes to myself
 
-Click anywhere, type, select text and hit Cmd-B. The pane on the right is the canonical markdown — what would be saved to disk.
+Things I'd do again, in order:
+
+1. Twenty periods, not one. The error in starting the clock divides by twenty.
+2. Time the swing past the *lowest* point, where the bob is fastest and the start and stop are sharpest.
+3. ~~Trust the clock.~~ Trust the *count*.
+
+Things I'd still like to try:
+
+- [x] Time twenty swings instead of one.
+- [ ] A heavier bob, in case ~~mass matters~~ I am wrong about it.
+- [ ] A longer thread — long enough to see the plane of the swing precess.
+- [ ] The whole thing in a stairwell, [Foucault](https://en.wikipedia.org/wiki/Foucault_pendulum)-style, if I can find one tall enough.
+
+I have begun to suspect that all the difficulty in physics is in *measuring well* — that the equations are the easy part.
 `;
 
 const MARKDOWN_FILTERS = [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }];
@@ -125,6 +155,70 @@ export function App() {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [view, setView] = useState<"rich" | "raw">("rich");
     const settingsButtonRef = useRef<HTMLButtonElement>(null);
+
+    const [findOpen, setFindOpen] = useState(false);
+    const [findQuery, setFindQuery] = useState("");
+    const [replaceText, setReplaceText] = useState("");
+    const [findOptions, setFindOptions] = useState<FindOptions>({});
+    const editorRef = useRef<EditorHandle>(null);
+
+    const find = useFind({
+        store,
+        query: findQuery,
+        options: findOptions,
+        enabled: findOpen && view === "rich",
+    });
+
+    const decorations = useMemo(
+        () => ({ matches: find.matches, activeIndex: find.activeIndex }),
+        [find.matches, find.activeIndex],
+    );
+
+    const closeFind = useCallback(() => {
+        setFindOpen(false);
+        // Hand focus back to the editor so typing resumes immediately.
+        editorRef.current?.focus();
+    }, []);
+
+    const openFind = useCallback(() => {
+        if (view !== "rich") return;
+        if (findOpen) return; // already open — don't clobber the user's query
+        // Seed the find input with the current single-block selection, if any.
+        // Skip selections that cross blocks, are collapsed, contain a newline,
+        // or contain an atom placeholder (￼ never appears in a real query).
+        const sel = store.getState().selection;
+        if (sel && sel.anchor.blockId === sel.focus.blockId && sel.anchor.offset !== sel.focus.offset) {
+            const block = store.getState().doc.find((b) => b.id === sel.focus.blockId);
+            if (block) {
+                const lo = Math.min(sel.anchor.offset, sel.focus.offset);
+                const hi = Math.max(sel.anchor.offset, sel.focus.offset);
+                const seed = block.content.slice(lo, hi);
+                if (seed && !/[\n￼]/.test(seed)) {
+                    setFindQuery(seed);
+                }
+            }
+        }
+        setFindOpen(true);
+    }, [store, view, findOpen]);
+
+    useEffect(() => {
+        function onKeyDown(e: KeyboardEvent) {
+            const mod = navigator.platform.match(/Mac|iP/) ? e.metaKey : e.ctrlKey;
+            if (!mod) return;
+            if (e.key.toLowerCase() === "f" && !e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                openFind();
+                return;
+            }
+            if (findOpen && e.key.toLowerCase() === "g") {
+                e.preventDefault();
+                if (e.shiftKey) find.prev();
+                else find.next();
+            }
+        }
+        window.addEventListener("keydown", onKeyDown, true);
+        return () => window.removeEventListener("keydown", onKeyDown, true);
+    }, [openFind, findOpen, find]);
 
     const editorRenderers = useMemo(
         () => ({
@@ -366,15 +460,36 @@ export function App() {
                 {view === "rich" ? (
                     <Editor
                         key={storeKey}
+                        ref={editorRef}
                         store={store}
                         renderers={editorRenderers}
                         renderPopover={renderPopover}
+                        decorations={findOpen ? decorations : undefined}
                         className="mx-auto max-w-[720px]"
                     />
                 ) : (
                     <SourceEditor value={markdown} onChange={setMarkdown} />
                 )}
             </main>
+            {findOpen && view === "rich" && (
+                <div className="fixed right-6 top-12 z-40">
+                    <FindReplaceBar
+                        query={findQuery}
+                        onQueryChange={setFindQuery}
+                        replaceText={replaceText}
+                        onReplaceTextChange={setReplaceText}
+                        options={findOptions}
+                        onOptionsChange={setFindOptions}
+                        matches={find.matches}
+                        activeIndex={find.activeIndex}
+                        onNext={find.next}
+                        onPrev={find.prev}
+                        onReplace={() => find.replaceCurrent(replaceText)}
+                        onReplaceAll={() => find.replaceAll(replaceText)}
+                        onClose={closeFind}
+                    />
+                </div>
+            )}
             {settingsOpen && (
                 <SettingsPopover
                     anchorRef={settingsButtonRef}

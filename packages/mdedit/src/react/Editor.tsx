@@ -27,8 +27,10 @@
  */
 
 import {
+    forwardRef,
     useCallback,
     useEffect,
+    useImperativeHandle,
     useMemo,
     useRef,
     useState,
@@ -55,7 +57,7 @@ import { parseMarkdown } from "../core/markdown/parse";
 import { serializeDoc } from "../core/markdown/serialize";
 import type { Store } from "../core/store";
 import { deleteRangeInBlock, findBlockIndex, generateId } from "../core/transform";
-import type { Block, InlineNode, Mark } from "../core/types";
+import type { Block, InlineNode, Mark, Match } from "../core/types";
 import { isCollapsed } from "../core/types";
 import { RenderedBlocks } from "./BlockView";
 import { Caret } from "./Caret";
@@ -64,6 +66,7 @@ import { defaultRenderers, type BlockRenderer } from "./defaultRenderer";
 import { EditorActionsContext, type EditorActions } from "./editorContext";
 import { HiddenInput } from "./HiddenInput";
 import { ImagePopover } from "./ImagePopover";
+import { MatchHighlightLayer } from "./MatchHighlightLayer";
 import { NodePopover } from "./NodePopover";
 import {
     defaultInlineRenderers,
@@ -98,6 +101,13 @@ export interface EditorProps {
      * `onStartEditing` when the host wants to switch out of preview state.
      */
     renderPopover?: PopoverRenderer;
+    /**
+     * Optional highlight overlay — typically driven by find/replace. `matches`
+     * are painted as semi-transparent rects below the text; the entry at
+     * `activeIndex` (if any) is styled distinctly. Highlights are decoration
+     * only: they don't touch the editor's selection.
+     */
+    decorations?: { matches: Match[]; activeIndex: number };
 }
 
 /**
@@ -166,7 +176,19 @@ export type PopoverRenderContext = PopoverRenderBase &
 
 export type PopoverRenderer = (ctx: PopoverRenderContext) => ReactNode | undefined;
 
-export function Editor({
+/**
+ * Imperative handle exposed via `ref={editorRef}`. Hosts (e.g. a find/replace
+ * bar that lives outside the editor tree) use this to hand focus back to the
+ * editor without reaching into its DOM internals.
+ */
+export interface EditorHandle {
+    /** Focus the hidden input that drives keystrokes; `preventScroll` is on. */
+    focus: () => void;
+    /** Blur the hidden input — typing won't reach the editor until it refocuses. */
+    blur: () => void;
+}
+
+export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     store,
     renderers = defaultRenderers,
     markRenderers = defaultMarkRenderers,
@@ -177,11 +199,20 @@ export function Editor({
     className,
     "aria-label": ariaLabel = "Editor",
     renderPopover,
-}: EditorProps) {
+    decorations,
+}, ref) {
     const subscribe = useCallback((fn: () => void) => store.subscribe(fn), [store]);
     const state = useSyncExternalStore(subscribe, store.getState, store.getState);
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
+    useImperativeHandle(
+        ref,
+        () => ({
+            focus: () => inputRef.current?.focus({ preventScroll: true }),
+            blur: () => inputRef.current?.blur(),
+        }),
+        [],
+    );
     const [inputHasFocus, setInputHasFocus] = useState(false);
     const [windowHasFocus, setWindowHasFocus] = useState(() =>
         typeof document === "undefined" ? true : document.hasFocus(),
@@ -895,6 +926,15 @@ export function Editor({
                 containerRef={containerRef}
                 mapping={mapping}
             />
+            {decorations && decorations.matches.length > 0 && (
+                <MatchHighlightLayer
+                    matches={decorations.matches}
+                    activeIndex={decorations.activeIndex}
+                    doc={state.doc}
+                    containerRef={containerRef}
+                    mapping={mapping}
+                />
+            )}
             <Caret
                 selection={state.selection}
                 doc={state.doc}
@@ -906,4 +946,4 @@ export function Editor({
             {popoverElement}
         </div>
     );
-}
+});

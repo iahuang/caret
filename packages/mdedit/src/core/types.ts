@@ -88,3 +88,13 @@ export function isCollapsed(sel: Selection | null): boolean {
     if (!sel) return true;
     return sel.anchor.blockId === sel.focus.blockId && sel.anchor.offset === sel.focus.offset;
 }
+
+/**
+ * A find result. Single-block: `start` and `end` are offsets within the named
+ * block's `content`. `end` is exclusive.
+ */
+export interface Match {
+    blockId: string;
+    start: number;
+    end: number;
+}

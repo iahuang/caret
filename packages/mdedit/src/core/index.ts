@@ -14,6 +14,7 @@ export {
 } from "./inlineNodes";
 export * from "./transform";
 export * from "./commands";
+export * from "./find";
 export * from "./tableCommands";
 export * from "./store";
 export * from "./schema";

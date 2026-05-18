@@ -423,6 +423,26 @@
     pointer-events: none;
 }
 
+/* Find/replace match highlights. `isolation: isolate` pins the rects' negative
+   z-index inside the editor's stacking context so they can't escape it; the
+   rects themselves sit behind the text and behind other decoration siblings
+   (selection, caret) which all default to z-index: auto. Active match gets a
+   stronger color. */
+.mdedit-editor {
+    --mdedit-match: rgba(255, 213, 79, 0.45);
+    --mdedit-match-active: rgba(255, 167, 38, 0.7);
+    isolation: isolate;
+}
+.mdedit-match-rect {
+    background: var(--mdedit-match);
+    pointer-events: none;
+    border-radius: 2px;
+    z-index: -1;
+}
+.mdedit-match-rect-active {
+    background: var(--mdedit-match-active);
+}
+
 /* Code block: editable in place. The <code> element carries `data-block-content`
    so the DOM walker enters it directly. Newlines inside content render as line
    breaks because of `white-space: pre`. Highlighting tokens come from

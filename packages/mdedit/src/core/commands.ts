@@ -412,6 +412,48 @@ function combineInlineNodes(
     return all.length > 0 ? all : undefined;
 }
 
+/**
+ * Replace `[from, to)` within a single block with `text`. Unlike `insertText`,
+ * this doesn't operate on the selection, doesn't trigger inline / markdown
+ * shortcuts, and doesn't touch `storedMarks` — replacements are verbatim.
+ *
+ * If the selection has an endpoint in the affected block, it's cleared: block
+ * offsets shifted under it, so the prior range is no longer meaningful and
+ * could point past `content.length`. Selections in other blocks are left
+ * alone — they're unaffected by this edit.
+ *
+ * Mark behavior follows from the underlying delete-then-insert: marks that
+ * strictly contain the replaced range extend over the new text; marks
+ * exactly aligned with or strictly inside the range are dropped. This matches
+ * what users expect when "finding inside a bolded run" — the result stays
+ * bold — versus "finding a bolded run exactly" — fresh text wins.
+ */
+export function replaceTextRange(
+    state: DocState,
+    blockId: string,
+    from: number,
+    to: number,
+    text: string,
+): DocState {
+    const idx = findBlockIndex(state.doc, blockId);
+    if (idx < 0) return state;
+    const block = state.doc[idx]!;
+    if (block.type === "math-block" || block.type === "hr") return state;
+    const clampedFrom = Math.max(0, Math.min(from, block.content.length));
+    const clampedTo = Math.max(clampedFrom, Math.min(to, block.content.length));
+    let next: Block = clampedFrom === clampedTo
+        ? block
+        : deleteRangeInBlock(block, clampedFrom, clampedTo);
+    if (text.length > 0) next = insertTextInBlock(next, clampedFrom, text);
+    if (next === block) return state;
+    const doc = state.doc.slice();
+    doc[idx] = next;
+    const sel = state.selection;
+    const selectionInBlock =
+        sel != null && (sel.anchor.blockId === blockId || sel.focus.blockId === blockId);
+    return { ...state, doc, selection: selectionInBlock ? null : sel };
+}
+
 export function deleteBackward(state: DocState): DocState {
     if (!state.selection) return state;
     if (!isCollapsed(state.selection)) return deleteSelection(state);
