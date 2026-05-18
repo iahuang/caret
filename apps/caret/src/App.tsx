@@ -12,6 +12,10 @@ import { caretCodeBlockRenderer } from "./CodeBlockRenderer";
 import { caretTableCellRenderer } from "./TableRenderer";
 import { CaretMathPopover } from "./CaretMathPopover";
 import { FindReplaceBar } from "./FindReplaceBar";
+import { basename, dirname, isInside } from "./fileNavigation";
+import { Breadcrumb, type BreadcrumbHandle } from "./Breadcrumb";
+import { FolderPopover } from "./FolderPopover";
+import { CommandPalette } from "./CommandPalette";
 
 const INITIAL = `# A small pendulum
 
@@ -110,11 +114,6 @@ function makeStore(content: string): Store {
     });
 }
 
-function basename(path: string): string {
-    const m = path.match(/[^\\/]+$/);
-    return m ? m[0] : path;
-}
-
 type DiscardAction = "save" | "discard" | "cancel";
 
 // Only the main window seeds the welcome doc; windows spawned via Cmd+N start blank.
@@ -139,6 +138,7 @@ export function App() {
     const [store, setStore] = useState<Store>(() => makeStore(IS_MAIN_WINDOW ? INITIAL : ""));
     const [storeKey, setStoreKey] = useState(0);
     const [currentPath, setCurrentPath] = useState<string | null>(null);
+    const [rootFolder, setRootFolder] = useState<string | null>(null);
     const [savedMarkdown, setSavedMarkdown] = useState(() => serializeDoc(store.getState().doc));
     const [markdown, setMarkdown] = useState(savedMarkdown);
 
@@ -161,6 +161,12 @@ export function App() {
     const [replaceText, setReplaceText] = useState("");
     const [findOptions, setFindOptions] = useState<FindOptions>({});
     const editorRef = useRef<EditorHandle>(null);
+
+    const [paletteOpen, setPaletteOpen] = useState(false);
+    const [folderPopover, setFolderPopover] = useState<
+        { anchor: HTMLElement; folderPath: string } | null
+    >(null);
+    const breadcrumbRef = useRef<BreadcrumbHandle>(null);
 
     const find = useFind({
         store,
@@ -215,10 +221,24 @@ export function App() {
                 if (e.shiftKey) find.prev();
                 else find.next();
             }
+            if (e.key.toLowerCase() === "p" && !e.shiftKey && !e.altKey) {
+                // Always swallow Cmd+P so the OS print dialog never appears in
+                // an editor window, even before the window has a root.
+                e.preventDefault();
+                if (rootFolder === null) return;
+                setFolderPopover(null);
+                setPaletteOpen(true);
+            }
+            if (e.key.toLowerCase() === "b" && e.shiftKey && !e.altKey) {
+                if (rootFolder === null) return;
+                e.preventDefault();
+                setPaletteOpen(false);
+                breadcrumbRef.current?.openInnermost();
+            }
         }
         window.addEventListener("keydown", onKeyDown, true);
         return () => window.removeEventListener("keydown", onKeyDown, true);
-    }, [openFind, findOpen, find]);
+    }, [openFind, findOpen, find, rootFolder]);
 
     const editorRenderers = useMemo(
         () => ({
@@ -300,10 +320,19 @@ export function App() {
         resolve: (action: DiscardAction) => void;
     } | null>(null);
 
+    // Tracked outside state so a second caller during the same tick still sees
+    // the open prompt — `setDiscardPrompt` updates wouldn't be visible yet.
+    const discardPromptPending = useRef(false);
+
     const confirmDiscard = useCallback((): Promise<DiscardAction> => {
+        // A prompt is already up; treat the duplicate request as a cancel so
+        // the caller bails cleanly instead of clobbering the live resolver.
+        if (discardPromptPending.current) return Promise.resolve("cancel");
+        discardPromptPending.current = true;
         return new Promise((resolve) => {
             setDiscardPrompt({
                 resolve: (action) => {
+                    discardPromptPending.current = false;
                     setDiscardPrompt(null);
                     resolve(action);
                 },
@@ -325,17 +354,45 @@ export function App() {
     // handler reach the latest closures without re-binding on every keystroke.
     const actionsRef = useRef<{
         newFile: () => Promise<void>;
+        newWindow: () => Promise<void>;
         openFile: () => Promise<void>;
         saveFile: () => Promise<boolean>;
         saveAsFile: () => Promise<boolean>;
         confirmAndClose: () => Promise<void>;
     }>({
         newFile: async () => {},
+        newWindow: async () => {},
         openFile: async () => {},
         saveFile: async () => false,
         saveAsFile: async () => false,
         confirmAndClose: async () => {},
     });
+
+    // Gate any action that replaces the current buffer. Returns false if the
+    // user cancelled or a save attempt failed.
+    const confirmIfDirty = useCallback(async (): Promise<boolean> => {
+        if (!isDirty) return true;
+        const action = await confirmDiscard();
+        if (action === "cancel") return false;
+        if (action === "save") {
+            const ok = await actionsRef.current.saveFile();
+            if (!ok) return false;
+        }
+        return true;
+    }, [isDirty, confirmDiscard]);
+
+    // Single funnel for "load this path into the current window". reroot=true
+    // is for Cmd+O (changes the window's root). Breadcrumb / Cmd+P navigation
+    // passes reroot=false so the window stays anchored.
+    const openPathInWindow = useCallback(
+        async (path: string, opts: { reroot: boolean }) => {
+            if (!(await confirmIfDirty())) return;
+            const content = await readTextFile(path);
+            loadDoc(content, path);
+            if (opts.reroot) setRootFolder(dirname(path));
+        },
+        [confirmIfDirty, loadDoc],
+    );
 
     actionsRef.current.saveAsFile = async () => {
         const picked = await saveDialog({
@@ -346,6 +403,11 @@ export function App() {
         await writeTextFile(picked, markdown);
         setCurrentPath(picked);
         setSavedMarkdown(markdown);
+        // Reroot only when Save-As escapes the current root, or there is no
+        // root yet (first save in a fresh window).
+        if (rootFolder === null || !isInside(rootFolder, picked)) {
+            setRootFolder(dirname(picked));
+        }
         return true;
     };
 
@@ -357,37 +419,30 @@ export function App() {
     };
 
     actionsRef.current.newFile = async () => {
+        // In-window "New File": clears the buffer but keeps the window's root,
+        // so the breadcrumb still reads "<root> / Untitled".
+        if (!(await confirmIfDirty())) return;
+        loadDoc("", null);
+    };
+
+    actionsRef.current.newWindow = async () => {
         openNewWindow();
     };
 
     actionsRef.current.openFile = async () => {
-        if (isDirty) {
-            const action = await confirmDiscard();
-            if (action === "cancel") return;
-            if (action === "save") {
-                const ok = await actionsRef.current.saveFile();
-                if (!ok) return;
-            }
-        }
+        // Pre-flight confirm so the user isn't asked to save mid-dialog.
+        if (!(await confirmIfDirty())) return;
         const picked = await openDialog({
             multiple: false,
             directory: false,
             filters: MARKDOWN_FILTERS,
         });
         if (typeof picked !== "string") return;
-        const content = await readTextFile(picked);
-        loadDoc(content, picked);
+        await openPathInWindow(picked, { reroot: true });
     };
 
     actionsRef.current.confirmAndClose = async () => {
-        if (isDirty) {
-            const action = await confirmDiscard();
-            if (action === "cancel") return;
-            if (action === "save") {
-                const ok = await actionsRef.current.saveFile();
-                if (!ok) return;
-            }
-        }
+        if (!(await confirmIfDirty())) return;
         await getCurrentWindow().destroy();
     };
 
@@ -396,7 +451,8 @@ export function App() {
         // to target `Any`, which receives events emitted to any label.
         const win = getCurrentWebviewWindow();
         const unlisteners = Promise.all([
-            win.listen("menu:new_window", () => void actionsRef.current.newFile()),
+            win.listen("menu:new_file", () => void actionsRef.current.newFile()),
+            win.listen("menu:new_window", () => void actionsRef.current.newWindow()),
             win.listen("menu:open_file", () => void actionsRef.current.openFile()),
             win.listen("menu:save_file", () => void actionsRef.current.saveFile()),
             win.listen("menu:save_as_file", () => void actionsRef.current.saveAsFile()),
@@ -425,22 +481,16 @@ export function App() {
                 data-tauri-drag-region
                 className="flex items-center gap-3 bg-caret-surface py-[7px] pl-[92px] pr-3"
             >
-                <span
-                    data-tauri-drag-region
-                    className="flex items-center gap-1 text-xs leading-none text-caret-text-muted"
-                    title={currentPath ?? "Unsaved buffer"}
-                >
-                    {displayName}
-                    {isDirty && (
-                        <span
-                            data-tauri-drag-region
-                            aria-label="Unsaved changes"
-                            className="bg-caret-text-faint w-1 h-1 rounded-full"
-                        >
-
-                        </span>
-                    )}
-                </span>
+                <Breadcrumb
+                    ref={breadcrumbRef}
+                    rootFolder={rootFolder}
+                    currentPath={currentPath}
+                    isDirty={isDirty}
+                    onSegmentClick={(folderPath, anchor) => {
+                        setPaletteOpen(false);
+                        setFolderPopover({ folderPath, anchor });
+                    }}
+                />
                 <div data-tauri-drag-region className="ml-auto flex items-center gap-1.5">
                     <ViewToggle value={view} onChange={handleViewChange} />
                     <button
@@ -502,6 +552,28 @@ export function App() {
                 <UnsavedChangesDialog
                     filename={displayName}
                     onAction={discardPrompt.resolve}
+                />
+            )}
+            {folderPopover && rootFolder !== null && (
+                <FolderPopover
+                    anchor={folderPopover.anchor}
+                    rootFolder={rootFolder}
+                    initialFolder={folderPopover.folderPath}
+                    currentPath={currentPath}
+                    onOpenFile={(path) => {
+                        void openPathInWindow(path, { reroot: false });
+                    }}
+                    onClose={() => setFolderPopover(null)}
+                />
+            )}
+            {paletteOpen && rootFolder !== null && (
+                <CommandPalette
+                    rootFolder={rootFolder}
+                    currentPath={currentPath}
+                    onOpenFile={(path) => {
+                        void openPathInWindow(path, { reroot: false });
+                    }}
+                    onClose={() => setPaletteOpen(false)}
                 />
             )}
         </div>

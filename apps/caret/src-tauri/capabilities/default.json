@@ -17,6 +17,10 @@
         {
             "identifier": "fs:allow-write-text-file",
             "allow": [{ "path": "**" }]
+        },
+        {
+            "identifier": "fs:allow-read-dir",
+            "allow": [{ "path": "**" }]
         }
     ]
 }

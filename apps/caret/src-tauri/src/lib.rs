@@ -9,8 +9,11 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
-            let new_window = MenuItemBuilder::with_id("new_window", "New Window")
+            let new_file = MenuItemBuilder::with_id("new_file", "New File")
                 .accelerator("CmdOrCtrl+N")
+                .build(app)?;
+            let new_window = MenuItemBuilder::with_id("new_window", "New Window")
+                .accelerator("CmdOrCtrl+Shift+N")
                 .build(app)?;
             let open_file = MenuItemBuilder::with_id("open_file", "Open...")
                 .accelerator("CmdOrCtrl+O")
@@ -35,6 +38,7 @@ pub fn run() {
                 .build()?;
 
             let file_menu = SubmenuBuilder::new(app, "File")
+                .item(&new_file)
                 .item(&new_window)
                 .separator()
                 .item(&open_file)
@@ -72,6 +76,7 @@ pub fn run() {
         })
         .on_menu_event(|app, event| {
             let event_name = match event.id().as_ref() {
+                "new_file" => "menu:new_file",
                 "new_window" => "menu:new_window",
                 "open_file" => "menu:open_file",
                 "save_file" => "menu:save_file",
