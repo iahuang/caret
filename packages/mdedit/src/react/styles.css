@@ -74,6 +74,15 @@
 
 .mdedit-content {
     position: relative;
+    /* The editor draws its own selection via SelectionLayer; native browser
+       selection here would be a parallel, out-of-sync highlight. Blocking it
+       at the CSS level catches the cases that bypass our mousedown handler:
+       cmd+A while the editor is blurred, drag-selecting from outside the
+       editor inward, and macOS right-click word-select. Form controls
+       (popover textareas, the hidden input) keep their normal selection
+       behavior since they live outside this subtree. */
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 /* Preserve trailing/multiple spaces in editable content so what the user
