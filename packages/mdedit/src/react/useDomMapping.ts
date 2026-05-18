@@ -93,110 +93,118 @@ function textLengthOf(node: Node): number {
     return total;
 }
 
-function computeOffsetInBlock(blockEl: HTMLElement, target: Node, targetOffset: number): number {
-    const contentEl = getContentEl(blockEl);
-    let offset = 0;
-    let found = false;
+// =============================================================================
+// Shared content-tree walker
+// =============================================================================
+//
+// Every model<->DOM lookup below has the same tree-walk shape: visit text and
+// atom leaves in document order (contributing N model characters each), skip
+// `data-no-content` subtrees, recurse through everything else. The differences
+// are what each walker does at each leaf and when it stops. `walkContent`
+// captures the shape; the per-walker logic lives in a `ContentVisitor`.
 
-    function walk(node: Node): boolean {
-        if (node === target) {
+type Step<T> = { done: true; result: T } | { done: false };
+const NEXT: Step<never> = { done: false };
+function step<T>(result: T): Step<T> {
+    return { done: true, result };
+}
+
+interface ContentVisitor<T> {
+    /** Called for every node before any leaf classification. Use for identity short-circuit. */
+    onEnter?: (node: Node) => Step<T>;
+    onText: (text: Text, len: number) => Step<T>;
+    onAtom: (atom: HTMLElement, len: number) => Step<T>;
+}
+
+function walkContent<T>(contentEl: HTMLElement, visitor: ContentVisitor<T>): T | null {
+    function visit(node: Node): Step<T> {
+        if (visitor.onEnter) {
+            const r = visitor.onEnter(node);
+            if (r.done) return r;
+        }
+        if (node.nodeType === Node.TEXT_NODE) {
+            return visitor.onText(node as Text, (node as Text).nodeValue?.length ?? 0);
+        }
+        if (isNoContent(node)) return NEXT;
+        const al = atomLen(node);
+        if (al !== null) {
+            return visitor.onAtom(node as HTMLElement, al);
+        }
+        for (let i = 0; i < node.childNodes.length; i++) {
+            const r = visit(node.childNodes[i]!);
+            if (r.done) return r;
+        }
+        return NEXT;
+    }
+    const r = visit(contentEl);
+    return r.done ? r.result : null;
+}
+
+function computeOffsetInBlock(blockEl: HTMLElement, target: Node, targetOffset: number): number {
+    let offset = 0;
+    const result = walkContent<number>(getContentEl(blockEl), {
+        onEnter: (node) => {
+            if (node !== target) return NEXT;
             if (node.nodeType === Node.TEXT_NODE) {
                 offset += targetOffset;
             } else {
+                // Element target: `targetOffset` is a child index.
                 for (let i = 0; i < targetOffset && i < node.childNodes.length; i++) {
                     offset += textLengthOf(node.childNodes[i]!);
                 }
             }
-            found = true;
-            return true;
-        }
-        if (node.nodeType === Node.TEXT_NODE) {
-            offset += node.nodeValue?.length ?? 0;
-            return false;
-        }
-        if (isNoContent(node)) return false;
-        const al = atomLen(node);
-        if (al !== null) {
-            // Target landed inside an atom: treat as "before the atom" for
-            // the walker. positionFromPoint will refine left/right by x.
-            if (node.contains(target)) {
-                found = true;
-                return true;
-            }
-            offset += al;
-            return false;
-        }
-        for (let i = 0; i < node.childNodes.length; i++) {
-            if (walk(node.childNodes[i]!)) return true;
-        }
-        return false;
-    }
-
-    walk(contentEl);
-    return found ? offset : 0;
+            return step(offset);
+        },
+        onText: (_text, len) => {
+            offset += len;
+            return NEXT;
+        },
+        onAtom: (atom, len) => {
+            // Target landed inside an atom: treat as "before the atom".
+            // `positionFromPoint` refines left/right by click x.
+            if (atom.contains(target)) return step(offset);
+            offset += len;
+            return NEXT;
+        },
+    });
+    return result ?? 0;
 }
 
 function domPositionInBlock(blockEl: HTMLElement, modelOffset: number): { node: Node; offset: number } {
     const contentEl = getContentEl(blockEl);
     let remaining = modelOffset;
-    let result: { node: Node; offset: number } | null = null;
-    // The most recent "I just consumed N characters and ended here" position.
-    // Updated whenever the walker passes a text node or an atom. Used as the
-    // fallback when the walk completes without setting `result` (e.g. the
+    // Fallback for when the walk finishes without a direct match (e.g. the
     // model offset lands exactly at the end of the content's last node).
+    // Updated whenever the walker passes a text node or an atom.
     let lastEndPoint: { node: Node; offset: number } | null = null;
 
-    function walk(node: Node): void {
-        if (result) return;
-        if (node.nodeType === Node.TEXT_NODE) {
-            const text = node as Text;
-            const len = text.nodeValue?.length ?? 0;
-            if (remaining <= len) {
-                result = { node: text, offset: remaining };
-                return;
-            }
+    const result = walkContent<{ node: Node; offset: number }>(contentEl, {
+        onText: (text, len) => {
+            if (remaining <= len) return step({ node: text, offset: remaining });
             remaining -= len;
             lastEndPoint = { node: text, offset: len };
-            return;
-        }
-        if (isNoContent(node)) return;
-        const al = atomLen(node);
-        if (al !== null) {
+            return NEXT;
+        },
+        onAtom: (atom, len) => {
+            const parent = atom.parentNode;
+            const idx = parent ? Array.prototype.indexOf.call(parent.childNodes, atom) : -1;
             if (remaining === 0) {
                 // Right before the atom — point at parent + child-index.
-                const parent = node.parentNode;
-                if (parent) {
-                    const idx = Array.prototype.indexOf.call(parent.childNodes, node);
-                    if (idx >= 0) result = { node: parent, offset: idx };
-                }
-                return;
+                if (parent && idx >= 0) return step({ node: parent, offset: idx });
+                return NEXT;
             }
-            if (remaining < al) {
+            if (remaining < len) {
                 // Inside a multi-char atom — place before it. 1-char atoms never hit this branch.
-                const parent = node.parentNode;
-                if (parent) {
-                    const idx = Array.prototype.indexOf.call(parent.childNodes, node);
-                    if (idx >= 0) result = { node: parent, offset: idx };
-                }
-                return;
+                if (parent && idx >= 0) return step({ node: parent, offset: idx });
+                return NEXT;
             }
-            // Walking *past* the atom. Record the end-position right after it so
-            // the fallback can use it if no later content matches `remaining`.
-            remaining -= al;
-            const parent = node.parentNode;
-            if (parent) {
-                const idx = Array.prototype.indexOf.call(parent.childNodes, node);
-                if (idx >= 0) lastEndPoint = { node: parent, offset: idx + 1 };
-            }
-            return;
-        }
-        for (let i = 0; i < node.childNodes.length; i++) {
-            walk(node.childNodes[i]!);
-            if (result) return;
-        }
-    }
+            // Walking past the atom — record the position right after it as the fallback.
+            remaining -= len;
+            if (parent && idx >= 0) lastEndPoint = { node: parent, offset: idx + 1 };
+            return NEXT;
+        },
+    });
 
-    walk(contentEl);
     if (result) return result;
     if (lastEndPoint) return lastEndPoint;
     return { node: contentEl, offset: 0 };
@@ -216,92 +224,56 @@ function domPositionInBlock(blockEl: HTMLElement, modelOffset: number): { node: 
  * geometry (e.g. a collapsed trailing whitespace).
  */
 function charRectAt(blockEl: HTMLElement, m: number): DOMRect | null {
-    const contentEl = getContentEl(blockEl);
     let pos = 0;
-    let result: DOMRect | null = null;
-
-    function walk(node: Node): void {
-        if (result) return;
-        if (node.nodeType === Node.TEXT_NODE) {
-            const text = node as Text;
-            const len = text.nodeValue?.length ?? 0;
-            if (m >= pos && m < pos + len) {
-                const local = m - pos;
-                const range = document.createRange();
-                try {
-                    range.setStart(text, local);
-                    range.setEnd(text, local + 1);
-                } catch {
-                    pos += len;
-                    return;
-                }
-                // Walk the rect list in reverse. When the probe range starts at
-                // a visual line break (e.g. inside a <pre>, right after a "\n"),
-                // browsers emit a phantom zero/height rect at the end of the
-                // prior line first; the actual glyph rect is last. Picking the
-                // first non-empty rect mis-locates the caret at end-of-content
-                // in a code-block.
-                const rects = range.getClientRects();
-                for (let i = rects.length - 1; i >= 0; i--) {
-                    const r = rects[i]!;
-                    if (r.width > 0 || r.height > 0) {
-                        result = r;
-                        return;
-                    }
-                }
-                return;
+    return walkContent<DOMRect | null>(getContentEl(blockEl), {
+        onText: (text, len) => {
+            if (m < pos || m >= pos + len) {
+                pos += len;
+                return NEXT;
             }
+            const local = m - pos;
+            const range = document.createRange();
+            try {
+                range.setStart(text, local);
+                range.setEnd(text, local + 1);
+            } catch {
+                pos += len;
+                return NEXT;
+            }
+            // Walk the rect list in reverse. When the probe range starts at a
+            // visual line break (e.g. inside a <pre>, right after a "\n"),
+            // browsers emit a phantom zero/height rect at the end of the prior
+            // line first; the actual glyph rect is last. Picking the first
+            // non-empty rect mis-locates the caret at end-of-content in a
+            // code-block.
+            const rects = range.getClientRects();
+            for (let i = rects.length - 1; i >= 0; i--) {
+                const r = rects[i]!;
+                if (r.width > 0 || r.height > 0) return step(r);
+            }
+            return step(null);
+        },
+        onAtom: (atom, len) => {
+            if (m >= pos && m < pos + len) return step(atom.getBoundingClientRect());
             pos += len;
-            return;
-        }
-        if (isNoContent(node)) return;
-        const al = atomLen(node);
-        if (al !== null) {
-            if (m >= pos && m < pos + al) {
-                if (node instanceof HTMLElement) result = node.getBoundingClientRect();
-                return;
-            }
-            pos += al;
-            return;
-        }
-        for (let i = 0; i < node.childNodes.length; i++) {
-            walk(node.childNodes[i]!);
-            if (result) return;
-        }
-    }
-    walk(contentEl);
-    return result;
+            return NEXT;
+        },
+    });
 }
 
 function offsetOfAtomElement(blockEl: HTMLElement, atomEl: HTMLElement): number | null {
-    const contentEl = getContentEl(blockEl);
     let offset = 0;
-    let found = false;
-
-    function walk(node: Node): void {
-        if (found) return;
-        if (node === atomEl) {
-            found = true;
-            return;
-        }
-        if (node.nodeType === Node.TEXT_NODE) {
-            offset += node.nodeValue?.length ?? 0;
-            return;
-        }
-        if (isNoContent(node)) return;
-        const al = atomLen(node);
-        if (al !== null) {
-            offset += al;
-            return;
-        }
-        for (let i = 0; i < node.childNodes.length; i++) {
-            walk(node.childNodes[i]!);
-            if (found) return;
-        }
-    }
-
-    walk(contentEl);
-    return found ? offset : null;
+    return walkContent<number>(getContentEl(blockEl), {
+        onEnter: (node) => (node === atomEl ? step(offset) : NEXT),
+        onText: (_text, len) => {
+            offset += len;
+            return NEXT;
+        },
+        onAtom: (_atom, len) => {
+            offset += len;
+            return NEXT;
+        },
+    });
 }
 
 export interface UseDomMappingOptions {
