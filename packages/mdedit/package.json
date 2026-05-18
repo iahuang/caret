@@ -7,6 +7,9 @@
         "./react": "./src/react/index.ts",
         "./react/styles.css": "./src/react/styles.css"
     },
+    "scripts": {
+        "test": "bun test"
+    },
     "peerDependencies": {
         "react": "^18.0.0 || ^19.0.0",
         "react-dom": "^18.0.0 || ^19.0.0"

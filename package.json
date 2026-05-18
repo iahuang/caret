@@ -9,7 +9,8 @@
     "scripts": {
         "dev": "bun --filter caret dev",
         "tauri:dev": "bun --filter caret tauri:dev",
-        "tauri:build": "bun --filter caret tauri:build"
+        "tauri:build": "bun --filter caret tauri:build",
+        "test": "bun --filter mdedit test"
     },
     "devDependencies": {
         "@types/bun": "^1.3.14",
