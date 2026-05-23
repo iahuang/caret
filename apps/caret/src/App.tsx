@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Code, Pencil, Settings as SettingsIcon } from "lucide-react";
+import { Code, HelpCircle, Pencil, Settings as SettingsIcon } from "lucide-react";
 import { createStore, parseMarkdown, serializeDoc, type FindOptions } from "mdedit/core";
 import type { Store } from "mdedit/core";
 import { Editor, defaultRenderers, useFind, type EditorHandle, type PopoverRenderer } from "mdedit/react";
@@ -9,6 +9,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow, LogicalPosition } from "@tauri-apps/api/window";
 import { WebviewWindow, getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { SettingsPopover, type Settings, defaultSettings, loadSettings, saveSettings } from "./Settings";
+import { HelpPopover } from "./Help";
 import { caretCodeBlockRenderer } from "./CodeBlockRenderer";
 import { caretTableCellRenderer } from "./TableRenderer";
 import { CaretMathPopover } from "./CaretMathPopover";
@@ -162,8 +163,10 @@ export function App() {
 
     const [settings, setSettings] = useState<Settings>(loadSettings);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [helpOpen, setHelpOpen] = useState(false);
     const [view, setView] = useState<"rich" | "raw">("rich");
     const settingsButtonRef = useRef<HTMLButtonElement>(null);
+    const helpButtonRef = useRef<HTMLButtonElement>(null);
 
     const [findOpen, setFindOpen] = useState(false);
     const [findQuery, setFindQuery] = useState("");
@@ -542,12 +545,29 @@ export function App() {
                 <div data-tauri-drag-region className="ml-auto flex items-center gap-1.5">
                     <ViewToggle value={view} onChange={handleViewChange} />
                     <button
+                        ref={helpButtonRef}
+                        type="button"
+                        aria-label="Help"
+                        aria-haspopup="dialog"
+                        aria-expanded={helpOpen}
+                        onClick={() => {
+                            setSettingsOpen(false);
+                            setHelpOpen((v) => !v);
+                        }}
+                        className="flex h-6 w-6 items-center justify-center rounded-md text-caret-text-faint transition-colors hover:bg-caret-border hover:text-caret-text focus:outline-none focus:ring-1 focus:ring-caret-link"
+                    >
+                        <HelpCircle size={14} strokeWidth={1.75} aria-hidden="true" />
+                    </button>
+                    <button
                         ref={settingsButtonRef}
                         type="button"
                         aria-label="Settings"
                         aria-haspopup="dialog"
                         aria-expanded={settingsOpen}
-                        onClick={() => setSettingsOpen((v) => !v)}
+                        onClick={() => {
+                            setHelpOpen(false);
+                            setSettingsOpen((v) => !v);
+                        }}
                         className="flex h-6 w-6 items-center justify-center rounded-md text-caret-text-faint transition-colors hover:bg-caret-border hover:text-caret-text focus:outline-none focus:ring-1 focus:ring-caret-link"
                     >
                         <SettingsIcon size={14} strokeWidth={1.75} aria-hidden="true" />
@@ -594,6 +614,12 @@ export function App() {
                     settings={settings}
                     onChange={setSettings}
                     onClose={() => setSettingsOpen(false)}
+                />
+            )}
+            {helpOpen && (
+                <HelpPopover
+                    anchorRef={helpButtonRef}
+                    onClose={() => setHelpOpen(false)}
                 />
             )}
             {discardPrompt && (
