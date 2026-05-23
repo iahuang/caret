@@ -487,6 +487,22 @@ export function insertBreak(state: DocState): DocState {
         return { doc, selection: collapsedAt({ blockId: para.id, offset: 0 }), storedMarks: null };
     }
 
+    // Enter at the very start of a heading: insert an empty paragraph in
+    // front and leave the heading (and its content/metadata) intact. Without
+    // this branch, the generic splitBlock path below would hand the heading
+    // text to the paragraph half and leave an empty heading sitting above
+    // a plain paragraph that lost its level.
+    if (block.type === "heading" && sel.anchor.offset === 0) {
+        const para: Block = { id: generateId(), type: "paragraph", content: "", marks: [] };
+        const doc = next.doc.slice();
+        doc.splice(idx, 0, para);
+        return {
+            doc,
+            selection: collapsedAt({ blockId: block.id, offset: 0 }),
+            storedMarks: null,
+        };
+    }
+
     let nextType: string | undefined;
     if (block.type === "heading") nextType = "paragraph";
     else if (block.type === "hr") nextType = "paragraph";

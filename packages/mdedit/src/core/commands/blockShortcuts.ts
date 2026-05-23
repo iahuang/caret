@@ -129,12 +129,15 @@ export function applyMarkdownShortcuts(state: DocState): DocState {
     }
 
     // Math-block shortcut: a paragraph whose entire content is `$$` becomes
-    // an empty math-block (plus a trailing paragraph for further typing).
-    // The editor's existing math-block detection auto-opens the popover as
-    // soon as the cursor lands inside the new block, so the user just keeps
-    // typing LaTeX. Fires after the second `$` is typed — the inline
-    // `$...$` shortcut intentionally skips `$$` pairs (see `tryMathShortcut`),
-    // so the two paths don't conflict.
+    // an empty math-block. The editor's existing math-block detection
+    // auto-opens the popover as soon as the cursor lands inside the new
+    // block, so the user just keeps typing LaTeX. Fires after the second
+    // `$` is typed — the inline `$...$` shortcut intentionally skips `$$`
+    // pairs (see `tryMathShortcut`), so the two paths don't conflict.
+    // No trailing paragraph is appended here: when the new block lands at
+    // the end of the doc, Editor's TRAILING_PARA_NEEDED invariant adds one
+    // automatically; in the middle of the doc the existing next block is
+    // already a valid exit.
     if (
         block.type === "paragraph" &&
         pos.offset === block.content.length &&
@@ -147,9 +150,8 @@ export function applyMarkdownShortcuts(state: DocState): DocState {
             marks: [],
             metadata: { latex: "" },
         };
-        const para: Block = { id: generateId(), type: "paragraph", content: "", marks: [] };
         const doc = state.doc.slice();
-        doc.splice(idx, 1, math, para);
+        doc.splice(idx, 1, math);
         return {
             doc,
             selection: collapsedAt({ blockId: math.id, offset: 0 }),
