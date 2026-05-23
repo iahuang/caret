@@ -8,6 +8,7 @@
  * space and would otherwise force the user to add one.
  */
 
+import { adjustInlineNodesForDelete } from "../inlineNodes";
 import { adjustMarksForDelete } from "../marks";
 import { parseOrderedMarker } from "../schema";
 import { createEmptyTable } from "../tableCommands";
@@ -189,6 +190,7 @@ export function applyMarkdownShortcuts(state: DocState): DocState {
             metadata: t.metadata,
             content: block.content.slice(t.consumed),
             marks: adjustMarksForDelete(block.marks, 0, t.consumed),
+            inlineNodes: adjustInlineNodesForDelete(block.inlineNodes, 0, t.consumed),
         };
         const doc = state.doc.slice();
         doc[idx] = next;
