@@ -5,6 +5,7 @@ import type { Store } from "mdedit/core";
 import { Editor, defaultRenderers, useFind, type EditorHandle, type PopoverRenderer } from "mdedit/react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow, LogicalPosition } from "@tauri-apps/api/window";
 import { WebviewWindow, getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { SettingsPopover, type Settings, defaultSettings, loadSettings, saveSettings } from "./Settings";
@@ -119,10 +120,18 @@ type DiscardAction = "save" | "discard" | "cancel";
 // Only the main window seeds the welcome doc; windows spawned via Cmd+N start blank.
 const IS_MAIN_WINDOW = getCurrentWindow().label === "main";
 
-function openNewWindow(): void {
+// Path passed in via `?path=…` when a window is spawned to open a Finder file.
+// Read once at module load — the query string never changes for a given window.
+const SEEDED_PATH: string | null = (() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("path");
+})();
+
+function openNewWindow(path?: string): void {
     const label = `editor-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    const url = path ? `index.html?path=${encodeURIComponent(path)}` : "index.html";
     new WebviewWindow(label, {
-        url: "index.html",
+        url,
         title: "Caret",
         width: 1100,
         height: 720,
@@ -460,6 +469,45 @@ export function App() {
         return () => {
             void unlisteners.then((fns) => fns.forEach((fn) => fn()));
         };
+    }, []);
+
+    // Drain Finder/Open-with paths queued in Rust. Runs on mount (cold launch
+    // with a file) and on every `caret:drain_paths` nudge (warm open).
+    useEffect(() => {
+        async function drain() {
+            const paths = await invoke<string[]>("take_pending_paths");
+            if (paths.length === 0) return;
+            // Snapshot emptiness once: state updates from the first load don't
+            // propagate within this loop, so re-checking per iteration would
+            // be misleading. The first path may reuse this window if it's
+            // empty+clean; the rest always spawn fresh windows.
+            const reuseFirst = currentPath === null && !isDirty;
+            for (let i = 0; i < paths.length; i++) {
+                const path = paths[i]!;
+                if (i === 0 && reuseFirst) {
+                    await openPathInWindow(path, { reroot: true });
+                } else {
+                    openNewWindow(path);
+                }
+            }
+        }
+        void drain();
+        const win = getCurrentWebviewWindow();
+        const unlistenPromise = win.listen("caret:drain_paths", () => void drain());
+        return () => {
+            void unlistenPromise.then((fn) => fn());
+        };
+        // Intentionally run once: `drain()` snapshots state itself, and the
+        // listener should outlive every dirty/path transition.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Spawned windows (Cmd+N with a path, or a Finder open routed to a new
+    // window) carry their target file in `?path=…`. Load it once on mount.
+    useEffect(() => {
+        if (!SEEDED_PATH) return;
+        void openPathInWindow(SEEDED_PATH, { reroot: true });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {

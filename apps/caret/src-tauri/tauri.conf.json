@@ -35,6 +35,15 @@
             "icons/128x128.png",
             "icons/128x128@2x.png",
             "icons/icon.png"
+        ],
+        "fileAssociations": [
+            {
+                "ext": ["md", "markdown"],
+                "name": "Markdown",
+                "description": "Markdown document",
+                "role": "Editor",
+                "rank": "Default"
+            }
         ]
     }
 }

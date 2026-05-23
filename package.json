@@ -1,19 +1,19 @@
 {
-    "name": "caret-workspace",
-    "private": true,
-    "type": "module",
-    "workspaces": [
-        "packages/*",
-        "apps/*"
-    ],
-    "scripts": {
-        "dev": "bun --filter caret dev",
-        "tauri:dev": "bun --filter caret tauri:dev",
-        "tauri:build": "bun --filter caret tauri:build",
-        "test": "bun --filter mdedit test"
-    },
-    "devDependencies": {
-        "@types/bun": "^1.3.14",
-        "typescript": "^5.6.0"
-    }
+  "name": "caret-workspace",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "bun --filter caret dev",
+    "tauri:dev": "bun --elide-lines=0 --filter caret tauri:dev",
+    "tauri:build": "bun --elide-lines=0 --filter caret tauri:build",
+    "test": "bun --filter mdedit test"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14",
+    "typescript": "^5.6.0"
+  }
 }

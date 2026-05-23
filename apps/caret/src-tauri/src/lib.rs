@@ -1,13 +1,49 @@
+use std::sync::Mutex;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder},
-    Emitter, Manager,
+    AppHandle, Emitter, Manager, RunEvent,
 };
+
+// Files queued by macOS (via Finder double-click or `open -a Caret …`) before
+// any webview is ready to receive them. Drained by the frontend on mount and
+// in response to `caret:drain_paths` nudges.
+#[derive(Default)]
+struct PendingPaths(Mutex<Vec<String>>);
+
+#[tauri::command]
+fn take_pending_paths(state: tauri::State<PendingPaths>) -> Vec<String> {
+    let mut guard = state.0.lock().expect("pending paths mutex poisoned");
+    std::mem::take(&mut *guard)
+}
+
+fn enqueue_and_nudge(app: &AppHandle, paths: Vec<String>) {
+    if paths.is_empty() {
+        return;
+    }
+    {
+        let state = app.state::<PendingPaths>();
+        let mut guard = state.0.lock().expect("pending paths mutex poisoned");
+        guard.extend(paths);
+    }
+    // Wake whichever webview is up so it pulls the queue. If none exists yet
+    // (cold launch), the frontend will drain on mount.
+    let windows = app.webview_windows();
+    let target = windows
+        .iter()
+        .find(|(_, w)| w.is_focused().unwrap_or(false))
+        .or_else(|| windows.iter().next());
+    if let Some((label, _)) = target {
+        let _ = app.emit_to(label.as_str(), "caret:drain_paths", ());
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .manage(PendingPaths::default())
+        .invoke_handler(tauri::generate_handler![take_pending_paths])
         .setup(|app| {
             let new_file = MenuItemBuilder::with_id("new_file", "New File")
                 .accelerator("CmdOrCtrl+N")
@@ -94,6 +130,17 @@ pub fn run() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app, event| {
+        if let RunEvent::Opened { urls } = event {
+            let paths: Vec<String> = urls
+                .into_iter()
+                .filter_map(|u| u.to_file_path().ok())
+                .filter_map(|p| p.to_str().map(|s| s.to_string()))
+                .collect();
+            enqueue_and_nudge(app, paths);
+        }
+    });
 }

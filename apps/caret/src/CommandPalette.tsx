@@ -155,7 +155,7 @@ export function CommandPalette({
                     onKeyDown={onKeyDown}
                     placeholder={placeholder}
                     spellCheck={false}
-                    className="w-full bg-transparent pl-9 pr-4 py-2 text-sm placeholder-caret-text-faint outline-none"
+                    className="w-full bg-transparent pl-9 pr-4 py-2 text-xs placeholder-caret-text-faint outline-none"
                 />
             </div>
             <div ref={listRef} className="max-h-[50vh] overflow-y-auto py-1">
