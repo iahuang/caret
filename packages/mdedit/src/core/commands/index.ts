@@ -33,6 +33,7 @@ export {
     updateInlineNode,
 } from "./blockType";
 export { findWordBoundaryBackward, findWordBoundaryForward } from "./wordBoundary";
+export { nextCharOffset, prevCharOffset } from "./charBoundary";
 export { applyMarkdownShortcuts } from "./blockShortcuts";
 export { applyInlineShortcuts } from "./inlineShortcuts";
 export { updateLinkHref, wrapSelectionInLink } from "./link";

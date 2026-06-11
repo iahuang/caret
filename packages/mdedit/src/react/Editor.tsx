@@ -872,6 +872,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
                     onExitRight={onExitRight}
                     containerRef={containerRef}
                     placeholder="URL"
+                    singleLine
                     openHref={href}
                 />
             );

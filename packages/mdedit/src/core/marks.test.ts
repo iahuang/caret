@@ -178,4 +178,16 @@ describe("toggleMark", () => {
     test("leaves marks of other types alone", () => {
         expect(toggleMark([italic(0, 10)], "bold", 2, 5)).toEqual([italic(0, 10), bold(2, 5)]);
     });
+
+    test("preserves attrs when absorbing an attr-bearing mark", () => {
+        const link: Mark = {
+            type: "link",
+            start: 0,
+            end: 4,
+            attrs: { href: "https://example.com", linkId: "L1" },
+        };
+        expect(toggleMark([link], "link", 4, 6)).toEqual([
+            { ...link, end: 6 },
+        ]);
+    });
 });

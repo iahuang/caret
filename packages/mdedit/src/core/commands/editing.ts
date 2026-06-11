@@ -18,10 +18,12 @@ import {
     replaceRange,
     splitBlock,
 } from "../transform";
-import type { Block, DocState, InlineNode } from "../types";
+import type { Block, DocState, InlineNode, Position } from "../types";
 import { INLINE_NODE_PLACEHOLDER, isCollapsed } from "../types";
 import { applyMarkdownShortcuts } from "./blockShortcuts";
+import { nextCharOffset, prevCharOffset } from "./charBoundary";
 import {
+    ATOMIC_BLOCK_TYPES,
     LIST_TYPES,
     collapsedAt,
     getDepth,
@@ -91,15 +93,117 @@ export function deleteSelection(state: DocState): DocState {
         });
     }
 
-    const firstBlock = state.doc[fromIdx]!;
-    const lastBlock = state.doc[toIdx]!;
-    const keptFirst = deleteRangeInBlock(firstBlock, from.offset, firstBlock.content.length);
-    const keptLast = deleteRangeInBlock(lastBlock, 0, to.offset);
-    const merged = mergeBlocks(keptFirst, keptLast);
-    const doc = replaceRange(state.doc, fromIdx, toIdx + 1, [merged]);
+    // Cross-block deletion. Endpoint blocks keep their unselected remnant,
+    // fully-covered middle blocks are dropped, and the two remnants merge
+    // only when both are ordinary text blocks. Mirrors the per-type rules in
+    // deleteBackward / deleteForward, which a range delete must not bypass:
+    //   - Atomic blocks (hr, math-block) keep their content in metadata, so a
+    //     remnant merge would silently drop it on serialize. They're consumed
+    //     whole — except when the selection merely touches their leading edge
+    //     (last endpoint at offset 0), which sliceDocBySelection likewise
+    //     treats as "not included".
+    //   - Tables live or die as a unit: only a selection covering every cell
+    //     removes the run. A partial selection clears the covered text but
+    //     keeps the cell blocks, so the grid invariants (and the (0,0) cell
+    //     that serializes the table) survive.
+    //   - Table cells and code blocks never merge with neighbors.
+    const doc = state.doc;
+
+    // Per-table "is the whole run inside the selection" decision, cached by id.
+    const tableCovered = new Map<string, boolean>();
+    function isTableCovered(tableId: string, cellIdx: number): boolean {
+        const cached = tableCovered.get(tableId);
+        if (cached !== undefined) return cached;
+        let start = cellIdx;
+        while (
+            start > 0 &&
+            doc[start - 1]!.type === "table-cell" &&
+            getTableCellMeta(doc[start - 1]!)?.tableId === tableId
+        ) {
+            start--;
+        }
+        let end = cellIdx;
+        while (
+            end < doc.length - 1 &&
+            doc[end + 1]!.type === "table-cell" &&
+            getTableCellMeta(doc[end + 1]!)?.tableId === tableId
+        ) {
+            end++;
+        }
+        const covered =
+            start >= fromIdx &&
+            end <= toIdx &&
+            (start > fromIdx || from.offset === 0) &&
+            (end < toIdx || to.offset === doc[end]!.content.length);
+        tableCovered.set(tableId, covered);
+        return covered;
+    }
+
+    const replacement: Block[] = [];
+    let firstRemnant: Block | null = null;
+    let lastRemnant: Block | null = null;
+
+    for (let i = fromIdx; i <= toIdx; i++) {
+        const block = doc[i]!;
+        const selStart = i === fromIdx ? from.offset : 0;
+        const selEnd = i === toIdx ? to.offset : block.content.length;
+
+        if (ATOMIC_BLOCK_TYPES.has(block.type)) {
+            if (i === toIdx && to.offset === 0) replacement.push(block);
+            continue;
+        }
+
+        const cellMeta = block.type === "table-cell" ? getTableCellMeta(block) : null;
+        if (cellMeta) {
+            if (isTableCovered(cellMeta.tableId, i)) continue;
+            const next =
+                selStart === selEnd ? block : deleteRangeInBlock(block, selStart, selEnd);
+            replacement.push(next);
+            if (i === fromIdx) firstRemnant = next;
+            continue;
+        }
+
+        if (i === fromIdx) {
+            firstRemnant = deleteRangeInBlock(block, selStart, selEnd);
+            replacement.push(firstRemnant);
+        } else if (i === toIdx) {
+            lastRemnant = deleteRangeInBlock(block, selStart, selEnd);
+            replacement.push(lastRemnant);
+        }
+        // Fully covered middle blocks are dropped.
+    }
+
+    const canMerge = (b: Block) => b.type !== "table-cell" && b.type !== "code-block";
+    let caret: Position;
+    let finalReplacement: Block[];
+    if (
+        firstRemnant !== null &&
+        lastRemnant !== null &&
+        replacement.length === 2 &&
+        canMerge(firstRemnant) &&
+        canMerge(lastRemnant)
+    ) {
+        const merged = mergeBlocks(firstRemnant, lastRemnant);
+        finalReplacement = [merged];
+        caret = { blockId: merged.id, offset: from.offset };
+    } else if (firstRemnant !== null) {
+        finalReplacement = replacement;
+        caret = {
+            blockId: firstRemnant.id,
+            offset: Math.min(from.offset, firstRemnant.content.length),
+        };
+    } else if (replacement.length > 0) {
+        finalReplacement = replacement;
+        caret = { blockId: replacement[0]!.id, offset: 0 };
+    } else {
+        const para: Block = { id: generateId(), type: "paragraph", content: "", marks: [] };
+        finalReplacement = [para];
+        caret = { blockId: para.id, offset: 0 };
+    }
+
     return withCodeBlockLineAffinity({
-        doc,
-        selection: collapsedAt({ blockId: merged.id, offset: from.offset }),
+        doc: replaceRange(doc, fromIdx, toIdx + 1, finalReplacement),
+        selection: collapsedAt(caret),
         storedMarks: null,
     });
 }
@@ -318,12 +422,15 @@ export function deleteBackward(state: DocState): DocState {
     const block = state.doc[idx]!;
 
     if (pos.offset > 0) {
-        const next = deleteRangeInBlock(block, pos.offset - 1, pos.offset);
+        // Step by grapheme, not code unit — deleting half a surrogate pair
+        // (emoji) would leave invalid text in the doc.
+        const from = prevCharOffset(block.content, pos.offset);
+        const next = deleteRangeInBlock(block, from, pos.offset);
         const doc = state.doc.slice();
         doc[idx] = next;
         return withCodeBlockLineAffinity({
             doc,
-            selection: collapsedAt({ blockId: next.id, offset: pos.offset - 1 }),
+            selection: collapsedAt({ blockId: next.id, offset: from }),
             storedMarks: null,
         });
     }
@@ -366,6 +473,28 @@ export function deleteBackward(state: DocState): DocState {
 
     if (idx === 0) return state;
     const prev = state.doc[idx - 1]!;
+    // Atomic blocks keep their visible content in metadata; merging this
+    // paragraph into one would silently drop the text on serialize. Delete
+    // the atomic block instead — same gesture as backspacing over an inline
+    // atom — and leave the paragraph untouched.
+    if (ATOMIC_BLOCK_TYPES.has(prev.type)) {
+        const doc = replaceRange(state.doc, idx - 1, idx, []);
+        return {
+            doc,
+            selection: collapsedAt({ blockId: block.id, offset: 0 }),
+            storedMarks: null,
+        };
+    }
+    // Table cells must not absorb outside text (it would bypass the cell
+    // invariants); code blocks must not absorb marks/atoms. Step the caret
+    // to the end of the previous block instead of merging.
+    if (prev.type === "table-cell" || prev.type === "code-block") {
+        return withCodeBlockLineAffinity({
+            ...state,
+            selection: collapsedAt({ blockId: prev.id, offset: prev.content.length }),
+            storedMarks: null,
+        });
+    }
     const prevLen = prev.content.length;
     const merged = mergeBlocks(prev, block);
     const doc = replaceRange(state.doc, idx - 1, idx + 1, [merged]);
@@ -385,15 +514,39 @@ export function deleteForward(state: DocState): DocState {
     const block = state.doc[idx]!;
 
     if (pos.offset < block.content.length) {
-        const next = deleteRangeInBlock(block, pos.offset, pos.offset + 1);
+        const to = nextCharOffset(block.content, pos.offset);
+        const next = deleteRangeInBlock(block, pos.offset, to);
         const doc = state.doc.slice();
         doc[idx] = next;
         return withCodeBlockLineAffinity({ doc, selection: state.selection, storedMarks: null });
     }
     if (idx >= state.doc.length - 1) return state;
     const after = state.doc[idx + 1]!;
+    // Atomic blocks are indivisible units: forward-delete with the caret
+    // inside one deletes the block itself; forward-delete just before one
+    // deletes the neighbor. Merging would either smuggle text into a block
+    // that serializes from metadata or silently drop that metadata.
+    if (ATOMIC_BLOCK_TYPES.has(block.type)) {
+        const doc = replaceRange(state.doc, idx, idx + 1, []);
+        return {
+            doc,
+            selection: collapsedAt({ blockId: after.id, offset: 0 }),
+            storedMarks: null,
+        };
+    }
+    if (ATOMIC_BLOCK_TYPES.has(after.type)) {
+        const doc = replaceRange(state.doc, idx + 1, idx + 2, []);
+        return { doc, selection: state.selection, storedMarks: null };
+    }
     // Cells must not merge — across cell boundaries, just step the caret.
-    if (block.type === "table-cell" || after.type === "table-cell") {
+    // Code blocks must not absorb the next block's marks/atoms (or leak
+    // newlines outward); step across the boundary instead.
+    if (
+        block.type === "table-cell" ||
+        after.type === "table-cell" ||
+        block.type === "code-block" ||
+        after.type === "code-block"
+    ) {
         return {
             ...state,
             selection: collapsedAt({ blockId: after.id, offset: 0 }),
@@ -505,7 +658,11 @@ export function insertBreak(state: DocState): DocState {
 
     let nextType: string | undefined;
     if (block.type === "heading") nextType = "paragraph";
-    else if (block.type === "hr") nextType = "paragraph";
+    // Atomic blocks (hr, math-block) must pass an explicit nextType: the
+    // default split copies `metadata` to the second half, which for a
+    // math-block would duplicate the formula. Enter on an atomic block
+    // means "give me a paragraph below".
+    else if (ATOMIC_BLOCK_TYPES.has(block.type)) nextType = "paragraph";
     else if (continues) nextType = block.type;
 
     const [first, second] = splitBlock(block, sel.anchor.offset, nextType);

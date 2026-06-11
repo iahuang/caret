@@ -77,8 +77,11 @@ export function toggleMark(marks: Mark[], type: MarkType, from: number, to: numb
         return out;
     }
     // Add the mark and absorb adjacent/overlapping marks of the same type.
+    // Absorbed marks may carry attrs (e.g. a link's href); keep the first
+    // ones found so the merge never silently destroys them.
     let newStart = from;
     let newEnd = to;
+    let attrs: Record<string, unknown> | undefined;
     const out: Mark[] = [];
     for (const m of marks) {
         if (m.type !== type || m.end < from || m.start > to) {
@@ -87,7 +90,10 @@ export function toggleMark(marks: Mark[], type: MarkType, from: number, to: numb
         }
         newStart = Math.min(newStart, m.start);
         newEnd = Math.max(newEnd, m.end);
+        if (attrs === undefined && m.attrs !== undefined) attrs = m.attrs;
     }
-    out.push({ type, start: newStart, end: newEnd });
+    const added: Mark = { type, start: newStart, end: newEnd };
+    if (attrs !== undefined) added.attrs = attrs;
+    out.push(added);
     return out.sort((a, b) => a.start - b.start);
 }

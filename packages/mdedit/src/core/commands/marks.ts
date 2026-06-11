@@ -40,6 +40,10 @@ function applyMarkToList(marks: Mark[], type: MarkType, from: number, to: number
     if (from === to || hasMarkInRange(marks, type, from, to)) return marks;
     let newStart = from;
     let newEnd = to;
+    // Absorbed neighbors may carry attrs (e.g. a link's href). The merged
+    // mark must keep them — emitting a bare {type, start, end} would silently
+    // destroy the data.
+    let attrs: Record<string, unknown> | undefined;
     const out: Mark[] = [];
     for (const m of marks) {
         if (m.type !== type || m.end < from || m.start > to) {
@@ -48,8 +52,11 @@ function applyMarkToList(marks: Mark[], type: MarkType, from: number, to: number
         }
         newStart = Math.min(newStart, m.start);
         newEnd = Math.max(newEnd, m.end);
+        if (attrs === undefined && m.attrs !== undefined) attrs = m.attrs;
     }
-    out.push({ type, start: newStart, end: newEnd });
+    const added: Mark = { type, start: newStart, end: newEnd };
+    if (attrs !== undefined) added.attrs = attrs;
+    out.push(added);
     return out.sort((a, b) => a.start - b.start);
 }
 
@@ -74,6 +81,15 @@ export function ensureMarksOnRange(
     let result = marks;
     const want = new Set(activeTypes);
     for (const t of candidateTypes) {
+        // Links are never reconciled here. A bare MarkType list can't carry
+        // their attrs (href, linkId), so "covering" the range would absorb a
+        // neighboring link into a synthesized mark with no URL — typing at a
+        // link's edge would destroy it. Typing strictly inside a link is
+        // already handled by the natural extension in adjustMarksForInsert
+        // (covered === shouldCover, no action); typing at an edge stays
+        // outside the link, matching editors where links don't grow on
+        // boundary typing.
+        if (t === "link") continue;
         const covered = hasMarkInRange(result, t, from, to);
         const shouldCover = want.has(t);
         if (covered && !shouldCover) {

@@ -264,6 +264,10 @@ export function applyInlineShortcuts(state: DocState): DocState {
 
         let nextMarks = adjustMarksForDelete(block.marks, innerEnd, pos.offset);
         nextMarks = adjustMarksForDelete(nextMarks, openerStart, innerStart);
+        // Atoms between the delimiters must shift left in lockstep with the
+        // content, or their positions point at the wrong characters.
+        let nextNodes = adjustInlineNodesForDelete(block.inlineNodes, innerEnd, pos.offset);
+        nextNodes = adjustInlineNodesForDelete(nextNodes, openerStart, innerStart);
         const newMark: Mark = {
             type: sc.markType,
             start: openerStart,
@@ -275,6 +279,7 @@ export function applyInlineShortcuts(state: DocState): DocState {
             ...block,
             content: newContent,
             marks: [...nextMarks, newMark].sort((a, b) => a.start - b.start),
+            inlineNodes: nextNodes,
         };
         const doc = state.doc.slice();
         doc[idx] = newBlock;

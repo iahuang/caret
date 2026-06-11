@@ -27,6 +27,8 @@ import {
     insertBreak,
     insertInlineNode,
     insertText,
+    nextCharOffset,
+    prevCharOffset,
     setBlockType,
     toggleMark,
     wrapSelectionInLink,
@@ -113,13 +115,15 @@ function moveByChar(ctx: KeyContext, dir: "left" | "right", extend: boolean) {
     const block = state.doc[idx]!;
     let next: Position = cur;
     if (dir === "left") {
-        if (cur.offset > 0) next = { blockId: cur.blockId, offset: cur.offset - 1 };
+        // Grapheme-aware stepping so the caret never lands inside a
+        // surrogate pair (emoji).
+        if (cur.offset > 0) next = { blockId: cur.blockId, offset: prevCharOffset(block.content, cur.offset) };
         else if (idx > 0) {
             const prev = state.doc[idx - 1]!;
             next = { blockId: prev.id, offset: prev.content.length };
         }
     } else {
-        if (cur.offset < block.content.length) next = { blockId: cur.blockId, offset: cur.offset + 1 };
+        if (cur.offset < block.content.length) next = { blockId: cur.blockId, offset: nextCharOffset(block.content, cur.offset) };
         else if (idx < state.doc.length - 1) {
             const after = state.doc[idx + 1]!;
             next = { blockId: after.id, offset: 0 };

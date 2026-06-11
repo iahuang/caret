@@ -9,6 +9,13 @@ import { isCollapsed } from "../types";
 
 export const LIST_TYPES = new Set(["bullet-item", "ordered-item", "task-item"]);
 
+/**
+ * Blocks whose visible content lives in `metadata`, not `content` (`content`
+ * is always ""). Text merged into one of these vanishes on serialize, so the
+ * delete commands treat them as indivisible units instead of merge partners.
+ */
+export const ATOMIC_BLOCK_TYPES = new Set(["hr", "math-block"]);
+
 /** Blockquote depth (>= 1). Depth 1 is the unnested base level. */
 export function getDepth(metadata: Record<string, unknown> | undefined): number {
     return (metadata?.depth as number | undefined) ?? 1;

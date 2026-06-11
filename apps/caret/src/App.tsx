@@ -574,7 +574,7 @@ export function App() {
                     </button>
                 </div>
             </header>
-            <main className="min-h-0 flex-1 overflow-auto bg-caret-surface px-10 py-10">
+            <main className="min-h-0 flex-1 overflow-auto bg-caret-surface px-10 pt-10 pb-[250px]">
                 {view === "rich" ? (
                     <Editor
                         key={storeKey}

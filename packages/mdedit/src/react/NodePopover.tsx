@@ -43,6 +43,11 @@ export interface NodePopoverProps {
     containerRef: RefObject<HTMLElement | null>;
     placeholder?: string;
     /**
+     * Treat the value as single-line (e.g. a URL): Enter commits the edit
+     * (`onDoneEditing`) instead of inserting a newline into the value.
+     */
+    singleLine?: boolean;
+    /**
      * When set, render an "open in new tab" affordance in the popover that
      * follows the URL. Plain-click on a link in the editor drops the caret
      * (so you can edit the label), so this is the discoverable way to
@@ -72,6 +77,7 @@ export function NodePopover({
     onExitRight,
     containerRef,
     placeholder = "LaTeX…",
+    singleLine = false,
     openHref,
     anchorAlignment = "start",
 }: NodePopoverProps) {
@@ -101,8 +107,19 @@ export function NodePopover({
     useLayoutEffect(() => {
         const ta = textareaRef.current;
         if (!ta) return;
+        // Capture scroll + caret-at-end before the resize. Setting
+        // style.height to "auto" briefly collapses the textarea, which
+        // clamps scrollTop to 0; once the box re-expands past max-height
+        // (14em) the caret at the end of long LaTeX would sit below the
+        // visible window. Restore scrollTop afterwards, and snap to the
+        // bottom when the caret was at value.length (the typical typing
+        // case) so the freshly-typed character stays in view.
+        const prevScrollTop = ta.scrollTop;
+        const wasAtEnd =
+            document.activeElement === ta && ta.selectionStart === ta.value.length;
         ta.style.height = "auto";
         ta.style.height = `${ta.scrollHeight}px`;
+        ta.scrollTop = wasAtEnd ? ta.scrollHeight : prevScrollTop;
     }, [value, pos]);
 
     if (!pos) return null;
@@ -135,6 +152,13 @@ export function NodePopover({
                 onChange={(e) => onChange(e.target.value)}
                 onKeyDown={(e) => {
                     if (e.key === "Escape") {
+                        e.preventDefault();
+                        onDoneEditing();
+                        return;
+                    }
+                    // Single-line values (URLs): Enter means "confirm", and a
+                    // literal newline would corrupt the value.
+                    if (singleLine && e.key === "Enter") {
                         e.preventDefault();
                         onDoneEditing();
                         return;
